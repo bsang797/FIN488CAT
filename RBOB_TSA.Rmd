@@ -435,6 +435,12 @@ prophet::prophet_plot_components(df, forecast)
 ```
 
 
+```{r}
+############### OPEC MODELING
+
+#download opec
+
+```
 
 
 

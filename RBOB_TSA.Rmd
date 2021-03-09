@@ -1,0 +1,613 @@
+---
+title: "TSA - YOUR COMMODODITY"
+author: "Eduardo Vega, Danial Sheikh, Bo Sang"
+date: "`r Sys.Date()`"
+output: html_document
+resource_files:
+- TSA_template.Rmd
+- TSA_template.Rmd
+---
+
+<style type="text/css"> body, td {font-size: 12px;} code.r{font-size: 10px;} pre {font-size: 10px} </style>
+
+```{r, echo = F}
+knitr::opts_chunk$set(echo = T,warning = F,message = F, fig.width = 4, fig.height = 3,fig.align = "center",tidy = FALSE, strip.white = TRUE)
+```
+
+**this template is a guide to organize your project in a clear manner**
+
+**quality of presentation refers amongst others to showing code, tables and charts in a manner that flows with your story. Details and computations shall remain in the code chunks without being rendered into the html output.**
+
+## Experimentation Part
+
++ Do all your practice and experimentation prior to starting the assignment in this section.
+
+### First gotta find the data
+
+**So far:**
+
+[Supply and Disposition](https://www.eia.gov/dnav/pet/pet_sum_snd_d_nus_mbbl_m_cur.htm)
+<br /> _click on value for time series_
+
+#### **Supply**
+
+- [Storage](https://www.eia.gov/dnav/pet/pet_stoc_wstk_dcu_nus_w.htm)
+-- [(monthly)](https://www.eia.gov/opendata/qb.php?sdid=PET.M_EPOBGRR_SAE_NUS_MBBL.M) 
+- [Imports](https://www.eia.gov/dnav/pet/pet_move_wkly_dc_NUS-Z00_mbblpd_w.htm)
+-- [(monthly)](https://www.eia.gov/opendata/qb.php?sdid=PET.MO1IM_NUS-Z00_1.M) 
+<br/> _thousand barrels per day_
+- [Adjustments (monthly)](https://www.eia.gov/opendata/qb.php?sdid=PET.MO1UA_NUS_1.M)
+          
+The US does not produce its own RBOB. It imports them all.
+
+#### **Demand**
+- [Net Inputs](https://www.eia.gov/dnav/pet/pet_sum_sndw_dcus_nus_w.htm)
+-- [(monthly)](https://www.eia.gov/opendata/qb.php?sdid=PET.MO1IM_NUS-Z00_1.M)
+<br/> _thousand barrels per day_
+- [Exports (monthly)](https://www.eia.gov/opendata/qb.php?sdid=PET.MO1EX_NUS-Z00_1.M)
+
+_all weekly data unless specified_
+        
+        
+        
+        
+
+```{r echo=FALSE, fig.width=8, fig.height=5}
+require(tidyverse)
+require(purrr)
+require(RTL)
+
+
+#create param and ticker df
+
+
+###Done monthly
+#all in thousands of barrels
+eia_df <- tibble::tribble(
+  ~ticker, ~param, ~type,
+#supply
+  'PET.M_EPOBGRR_SAE_NUS_MBBL.M', 'Storage', 'Stocks',
+  'PET.MO1IM_NUS-Z00_1.M', 'Imports', 'Input',
+  'PET.MO1UA_NUS_1.M', 'Adjustments', 'Supply',
+#demand
+  'PET.M_EPOBGRR_YIR_NUS_MBBL.M', 'Demand(net inputs)', 'Production',
+  'PET.MO1EX_NUS-Z00_1.M', 'Exports', 'Output',
+  'PET.MGRRPUS1.M', 'Refined', 'Output' #reformulated gasoline production
+)
+
+data <- eia_df %>%
+   dplyr::mutate(key = '4d1df1f2cab976fcda3c066a4723d720') %>%
+   dplyr::mutate(data = purrr::map2(ticker, key, RTL::eia2tidy)) %>%
+   dplyr::select(param, type, data) %>% 
+   unnest(cols = data) %>%
+   dplyr::select(date,param,value)
+
+
+##Done weekly
+# ~ticker, ~param, ~type,
+# #supply
+#   'PET.W_EPOBGRR_SAE_NUS_MBBL.M', 'Storage', 'Stocks',
+#   'PET.W_EPOBGRR_IM0_NUS-Z00_MBBLD.W', 'Imports', 'Input',
+# #demand
+#   'PET.W_EPOBGRR_YIR_NUS_MBBLD.W', 'Demand(net inputs)', 'Production',
+#   'PET.MO1EX_NUS-Z00_1.M', 'Exports', 'Output
+
+
+
+multiplyBy7 <- function(x) {
+  xx = x * 7
+  return(xx)
+}
+
+#transform data
+# data <- data %>% pivot_wider(names_from = param, values_from=value) %>%
+#   #scale to weekly totals
+#   # dplyr::mutate_at(c('Imports','Demand(net inputs)'), multiplyBy7) %>% 
+#   #change in storage
+#   # dplyr::mutate(Storage = Storage - lag(Storage)) %>% 
+#   pivot_longer(cols = 2:ncol(data), names_to='param', values_to='value')
+
+fig.title = "US RBOB"
+library(scales)
+p1 <- data %>%  
+  # dplyr::filter(param %in% c("Storage", 
+  #                            "Imports", 
+  #                            "Exports", 
+  #                            "Demand(net inputs)", 
+  #                            "Adjustments")) %>%
+  ggplot(aes(x = date, y = value, color = param)) +
+  geom_line() +
+  scale_y_continuous(labels = scales::comma) +#,
+                     # limits = c(-5000,10000)) +
+  ggtitle(fig.title)
+
+plt <- p1 %>% plotly::ggplotly()
+plt
+```
+
+
+#### **The SD Balance formula is:**
+
+##### $imports + adjustments \approx demand + delta(stock) +export$
+
+### Market View:
+
+##### SD Indicators:
+- Motor Gasoline consumption
+```{r echo=FALSE}
+# petroleum weekly report: https://www.eia.gov/dnav/pet/pet_sum_sndw_dcus_nus_w.htm
+#monthly
+#PET.MD0UP_NUS_2.M
+#weekly
+# PET.WGFUPUS2.W - THOUSAND BARRELS PER DAY
+```
+
+- Stock of motor gasoline
+```{r echo=FALSE}
+#weekly
+# PET.WGFSTUS1.W - THOUSAND BARRELS
+# PET.W_EPM0F_EEX_NUS-Z00_MBBLD.W - Reformulated - THOUSAND BARRELS
+```
+
+- Exports of motor Gasoline
+```{r echo=FALSE}
+#weekly
+# PET.W_EPM0F_EEX_NUS-Z00_MBBLD.W - THOUSAND BARRELS PER DAY
+```
+- Gasoline Production
+```{r}
+#weekly
+# PET.WGRRPUS2.W BARRELS PER DAY
+```
+
+
+
+Maybe also refiner blender net production of gasoline.
+US does not import reformulated motor gasoline
+
+```{r echo=FALSE, fig.width=8, fig.height=5}
+
+#https://www.eia.gov/petroleum/weekly/gasoline.php
+
+eia_fin_gasoline <- tibble::tribble(
+  ~ticker, ~param, ~type,
+  'PET.WGTSTUS1.W', 'total_gasoline_stock', 'stock',
+  
+  # 'PET.WGFSTUS1.W', 'gasoline_stock', 'stock',
+  
+  # 'PET.WBCSTUS1.W', 'blending_components_stock', 'stock',
+  
+  # 'PET.W_EPM0_VSD_NUS_DAYS.W', 'days_supply', 'stock',
+  
+  'PET.WGFUPUS2.W', 'consumption', 'input',
+  # per DAY
+  
+  'PET.W_EPM0F_IM0_NUS-Z00_MBBLD.W','gasoline_imports','input', 
+  # per DAY
+  
+  # 'PET.WBCIMUS2.W', 'blending_components_imports', 'input',
+  # per DAY
+  
+  'PET.W_EPM0F_EEX_NUS-Z00_MBBLD.W', 'gasoline_exports', 'output',
+  # per DAY
+  
+  'PET.WGFRPUS2.W', 'gasoline_production', 'output',
+  # per DAY
+  
+  # 'PET.WGRRPUS2.W', 'reformulated_gasoline_production', 'output', #reformulated gasoline 
+  # per DAY
+  
+  # 'PET.WG4TP_NUS_2.W', 'conventional_gasoline_production', 'output',
+  # per DAY
+  
+  'PET.EER_EPMRR_PF4_Y05LA_DPG.D', 'rbob_spot' , 'spot',
+  # dollars per gallon
+
+)
+
+gasoline_data <- eia_fin_gasoline %>%
+   dplyr::mutate(key = '4d1df1f2cab976fcda3c066a4723d720') %>%
+   dplyr::mutate(data = purrr::map2(ticker, key, RTL::eia2tidy)) %>%
+   dplyr::select(param, data, type) %>% 
+   unnest(cols = data) %>% 
+   dplyr::select(date,param,value, type)
+
+# maxcols = n_distinct(gasoline_data['param']) + 1
+
+gasoline_data <- gasoline_data %>%  
+  dplyr::mutate(value = case_when(type=='spot' ~ value*42,
+                                  type!='stock' ~ value*7,
+                                  TRUE ~ value)) %>% 
+  dplyr::mutate()
+
+
+############-------------------------Plot SD model
+motor_gas_plt2 <- gasoline_data %>% 
+  # dplyr::mutate(value = case_when(param=='days_supply' ~ value*1000,
+  #                                 param=='rbob_spot' ~ value*1000,
+  #                                 TRUE ~ value)) %>% 
+  dplyr::filter(param %in% c('gasoline_production',
+                             'consumption',
+                             'gasoline_imports',
+                             'gasoline_exports',
+                             'total_gasoline_stock')) %>% 
+  ggplot(aes(x=date)) +
+  geom_line(aes(y=value,color=param)) +
+  scale_y_continuous(name = 'Thousand Barrels per week',
+                     sec.axis = sec_axis(~./1000, name = "RBOB Spot price/1000 barrels"),
+                     labels = scales::comma) +
+  scale_x_date(date_breaks = '5 years',
+               date_labels = '%Y')
+
+#The US consumes all it produces. + imports the rest. not much is saved in storage
+
+motor_gas_plt2
+motor_gas_plt2 %>% plotly::ggplotly()
+
+
+#check actual storage change vs implied
+
+
+#eia outlook
+# U.S. regular gasoline retail prices averaged $2.33 per gallon (gal) in January, compared with an average of $2.20/gal in December and $2.55/gal in January 2020. EIA forecasts gasoline prices to average $2.44/gal in 2021 and $2.46/gal in 2022. U.S. diesel fuel prices averaged $2.68/gal in January compared with $2.58/gal in December and $3.05/gal in January 2020, and EIA forecasts it will average $2.70/gal in 2021 and $2.77/gal in 2022.
+# On a volume basis, U.S. consumption of gasoline declined by more than other petroleum products in 2020. EIA forecasts that U.S. gasoline consumption will rise in the forecast but remain lower than 2019 levels. U.S. gasoline consumption is forecast to average 8.6 million b/d in 2021 and 8.9 million b/d in 2022, up from 8.0 million b/d in 2020 but lower than the 9.3 million b/d consumed in 2019.
+
+# On a volume basis, U.S. consumption of gasoline declined by more than other petroleum products in 2020. EIA forecasts that U.S. gasoline consumption will rise in the forecast but remain lower than 2019 levels. U.S. gasoline consumption is forecast to average 8.6 million b/d in 2021 and 8.9 million b/d in 2022, up from 8.0 million b/d in 2020 but lower than the 9.3 million b/d consumed in 2019.
+
+```
+
+
+```{r echo=FALSE}
+library(zoo)
+library(lubridate)
+library(tidyselect)
+
+
+#REGRESSION
+
+# filter date:
+# tail(gasoline_data_wide[c('date', 'gasoline_exports')] %>% na.omit())
+
+
+getSeason <- function(x) {
+  WS <- as.Date("2012-12-15", format = "%Y-%m-%d") # Winter Solstice
+  SE <- as.Date("2012-3-15",  format = "%Y-%m-%d") # Spring Equinox
+  SS <- as.Date("2012-6-15",  format = "%Y-%m-%d") # Summer Solstice
+  FE <- as.Date("2012-9-15",  format = "%Y-%m-%d") # Fall Equinox
+  
+  # Convert dates from any year to 2012 dates
+  d <- as.Date(strftime(x, format="2012-%m-%d"))
+
+  ifelse (d >= WS | d < SE, "Winter",
+    ifelse (d >= SE & d < SS, "Spring",
+      ifelse (d >= SS & d < FE, "Summer", "Fall")))
+  
+  
+}
+
+
+gasoline_data_wide <- gasoline_data %>% select(-type) %>% 
+  pivot_wider(names_from = param, values_from = value) %>% 
+  # filter(date>'2010-06-04') %>%
+  # zoo::na.locf(na.rm = TRUE) %>%
+  # dplyr::mutate_if(is.numeric, ~ (log(.x) - log(lag(.x)))) %>%
+  # dplyr::mutate_at(vars(matches('total_gasoline_stock')), ~ (log(.x) - log(lag(.x)))) %>% 
+  na.omit()
+
+
+gasoline_data_wide <- gasoline_data_wide %>% 
+  mutate(season = purrr::map_chr(.x = date, .f = getSeason))
+
+# gasoline_data_wide
+
+library(rsample)
+library(recipes)
+library(parsnip)
+library(broom)
+library(yardstick)
+
+set.seed(131)
+
+#split the data
+gasoline_split <- gasoline_data_wide %>% initial_split(prop = 3/4)
+gasoline_train <- training(gasoline_split)
+gasoline_test <-  testing(gasoline_split)
+
+
+#recipe
+gasoline_recipe <- recipes::recipe(formula = rbob_spot ~ ., data = gasoline_data_wide) %>%
+  step_dummy(season, one_hot = TRUE) %>%
+  step_arrange(date) %>% 
+  # step_rm(date) %>%
+  step_rm(rbob_spot) %>% 
+  prep()
+
+# summary(gasoline_recipe)
+  
+
+gasoline_train_baked <- recipes::bake(object = gasoline_recipe,
+                                      new_data = gasoline_train)
+gasoline_test_baked <- recipes::bake(object = gasoline_recipe,
+                                      new_data = gasoline_test)
+gasoline_baked <- recipes::bake(object = gasoline_recipe,
+                                      new_data = gasoline_data_wide)
+```
+
+
+```{r echo=FALSE}
+#regresison models
+gasoline_regmodel <- parsnip::linear_reg() %>% 
+  set_engine('lm') %>% 
+  set_mode('regression') %>% 
+  fit(rbob_spot ~ ., data = gasoline_train_baked)
+
+#Model specs
+gasoline_regmodel
+# gasoline_regmodel %>% broom::tidy()
+# summary(gasoline_regmodel)
+
+
+#predict
+rbob_spot_pred <- parsnip::predict.model_fit(gasoline_regmodel, gasoline_test_baked %>% select(-rbob_spot))
+results <- gasoline_test_baked %>% select(rbob_spot) %>% bind_cols(rbob_spot_pred)
+
+results %>% yardstick::mae(truth = .[[1]],
+                           estimate = .[[2]])
+
+results %>% yardstick::rsq(truth = .[[1]],
+                           estimate = .[[2]])
+```
+
+
+```{r echo=FALSE}
+#arima model
+
+library(timetk)
+library(modeltime)
+
+gasoline_prophet <- modeltime::prophet_reg(seasonality_yearly = TRUE) %>%
+  set_mode('regression') %>%
+  set_engine('prophet') %>% 
+  fit(gasoline_production ~ date, data = gasoline_train_baked)
+
+gasoline_prophet
+
+
+results_prophet <- parsnip::predict.model_fit(gasoline_prophet, 
+                                              new_data = gasoline_test_baked %>% select(date)) %>% 
+  dplyr::transmute(date = gasoline_test_baked$date,
+                   actual = gasoline_test_baked$gasoline_production,
+                   prediction = .pred)
+
+#model fit
+plt <- results_prophet %>% pivot_longer(cols = 2:3, names_to='param', values_to='value') %>% 
+  ggplot(aes(x=date,y=value,color=param)) +
+  geom_line()
+
+
+
+
+# premonition
+premonition_prophet <- parsnip::predict.model_fit(gasoline_prophet, 
+                                                  new_data = nd) %>% 
+  dplyr::transmute(date = nd$date,
+                   # actual = gasoline_test_baked$gasoline_production,
+                   prediction = .pred)
+
+
+plt <- premonition_prophet %>%
+  ggplot(aes(x=date,y=prediction)) +
+  geom_line()
+
+
+plt
+plt %>% plotly::ggplotly()
+
+
+
+
+
+#class prophet
+
+df <- prophet::prophet(gasoline_train_baked %>% 
+                         rename(ds = date, y = gasoline_production) %>% 
+                         select(ds, y))
+
+future <- 
+  prophet::make_future_dataframe(df, periods = 12, freq = 'month')
+tail(future)
+
+######### TO USE IN PARSNIP PREDICTCION
+nd <- tibble(date = future$ds)
+#########
+
+
+forecast <- predict(df, future)
+tail(forecast[c('ds', 'yhat', 'yhat_lower', 'yhat_upper')])
+
+p <- plot(df, forecast, xlabel = "", ylabel = "kbd")
+
+plotly::ggplotly(p)
+
+
+prophet::prophet_plot_components(df, forecast)
+
+```
+
+
+
+
+
+
+Another SD indicator: Regulation
+
+
+## **Strategies**
+
+#### Over 50% of crude is converted into gasoline.
+```{r echo=FALSE}
+
+mstar <- c('morningstar.ctrd@ualberta.ca','k^ehE%&vbX')
+
+#generate contracts
+
+generateContracts <- function(tick, first_year, last_year, month_1, month_2) {
+  
+  yrs = seq(from = first_year, to=last_year, by=1)
+  contract_yrs = seq(from = substring(first_year, nchar(first_year)), 
+            to=substring(last_year, nchar(last_year)),
+            by = 1)
+  contract = paste0(rep(tick, length(yrs)),
+                    contract_yrs)
+  
+  cp <- dplyr::tibble(
+    year = yrs,
+    first = paste0(contract, month_1),
+    second = paste0(contract, month_2)
+  )
+ 
+  return(cp)
+  
+}
+
+cpairs1 <- generateContracts("RB", 2014, 2020, 'H', 'J')
+
+#https://www.cmegroup.com/month-codes.html
+
+#trade the time spread
+cpairs <-
+  dplyr::tibble(
+    year = c("2014", "2015", "2016", "2017", "2018", "2019", "2020", "2021"),
+    first = c("@RB4M", "@RB5M", "@RB6M", "@RB7M", "@RB8M", "@RB9M", "@RB0M", "RB21M"),
+    second = c("@RB4V", "@RB5V", "@RB6V", "@RB7V", "@RB8V", "@RB9V", "@RB0V", "RB21V")
+  )
+
+
+#trade the crack spread
+cpairs <-
+  dplyr::tibble(
+    year = c("2014", "2015", "2016", "2017", "2018", "2019", "2020", "2021"),
+    first = c("@RB4H", "@RB5H", "@RB6H", "@RB7H", "@RB8H", "@RB9H", "@RB0H", "RB21H"),
+    second = c("@CL4H", "@CL5H", "@CL6H", "@CL7H", "@CL8H", "@CL9H", "@CL0H", "CL21H")
+  )
+
+RTL::chart_spreads(
+  cpairs = cpairs,
+  daysFromExpiry = 200,
+  from = "2012-01-01",
+  conversion = c(42,42),
+  feed = "CME_NymexFutures_EOD",
+  iuser = mstar[[1]],
+  ipassword = mstar[[2]],
+  title = "March/April ULSD Nymex Spreads",
+  yaxis = "$ per bbl",
+  output = "data"
+)
+
+RTL::chart_spreads(
+  cpairs = cpairs1,
+  daysFromExpiry = 200,
+  from = "2012-01-01",
+  conversion = c(42,42),
+  feed = "CME_NymexFutures_EOD",
+  iuser = mstar[[1]],
+  ipassword = mstar[[2]],
+  title = "March/April ULSD Nymex Spreads",
+  yaxis = "$ per bbl",
+  output = "chart"
+)
+
+tickers_eia
+
+```
+
+
+
+
+
+
+
+
+
+
+**Disregard the sections below for the time being**
+
+## Summary
+
+### What's changed
+
+### Current Exposure
+
+### New Trades if any
+
+## Form a Market View
+
+### Supply Demand Indicators
+
+Build a SD balance dashboard to support forming and explaining a market view below.
+
+```{r}
+# You are expected to build your own SD balance from the EIA and other website APIs
+# The following is an example of series names for Crude SD components to get you going.
+# It is by no means a substitute for doing your own research
+library(RTL)
+data("tickers_eia")
+tickers_eia %>% dplyr::filter(product == "RBOB")
+```
+
++ Clearly laid out components of SD balances.
++ State why they matter.
++ Provide both long term and short term views. Your trade horizon is weekly - can you identify clearly from the chart when a change occurs?
+
+### Market View
+
++ View based on SD indicators ensuring that your conclusions are clearly readable from your charts.
++ Build analytics that is relevant to your current view.
++ If you have explored more, put them in an appendix. 
+
+## Desired Exposure
+
+Translating your market view into strength of market call and allocate risk versus maximum limit
+
++ Evidence of converting market view into a strength of market call.
++ Strength of market call translates into allocating risk allocation vs your limits.
+
+## Monetization Strategies
+
++ Evidence of exploring what we have covered in class.
++ How do you take those further with exploring various combinations along the grade, delivery location and delivery timing axis.
++ Diligence in being nimble in those in light of evolving market context.
+
+## Risk Appetite
+
++ Allocate risk in the context of risk reward ensuring capital preservation.
++ Evidence of a basic framework that you utilize to make your decision. Best is if you can articulate it clearly and quantify it.
+
+## Execution
+
++ What trades are you executing? 
++ Rationale stated clearly?
++ Entry/ Exit levels stated?
++ 
+
+## Profit and Loss ("PL" Attribution
+
+For each strategy:
+
++ Provide a grid of PL attribution by risk factors (flat price, time spread, crack,) 
++ Is it in line with your market call? Learnings...
+
+## Lessons Learned
+
+What have you learned from this project?
+
+## Questions for Weekly Meeting with Prof
+
+1. a...
+2. b...
+
+
+
+
+
+

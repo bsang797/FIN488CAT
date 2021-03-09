@@ -1,0 +1,308 @@
+---
+title: "asdasdasd"
+author: "Danial Sheikh"
+date: "07/03/2021"
+output: html_document
+---
+
+```{r}
+library(RTL)
+as_tibble(tickers_eia)
+unique(tickers_eia$product)
+(sd <- tickers_eia %>% dplyr::filter(product == "mogas.rbob")
+ %>% dplyr::as_tibble())
+
+eia_df <- tibble::tribble( ~ ticker,  ~ name) %>%
+  add_row(ticker = sd$tick.eia[1:nrow(sd)], name = sd$tick.r[1:nrow(sd)]) %>%
+  dplyr::mutate(key = "4d1df1f2cab976fcda3c066a4723d720") %>%
+  dplyr::mutate(df = purrr::pmap(list(ticker, key, name), .f = RTL::eia2tidy)) %>%
+  dplyr::select(df) %>% tidyr::unnest(df)
+
+fig.title = "Jet US SD Balance Components (kbd)"
+p1 <- eia_df %>% dplyr::filter(date >= "2000-01-01") %>%
+  ggplot(aes(x = date, y = value, color = series)) + geom_line() +
+  scale_y_continuous(labels = comma) +
+  labs(title = fig.title, y = "kbd", x = "")
+
+p1 %>% plotly::ggplotly()
+```
+
+supply + imports = demand + exports + storage
+
+
+```{r}
+require(tidyverse)
+require(purrr)
+require(RTL)
+
+########### Data Keys ###########
+Production <- "PET.MGRRPUS1.M"       #Demand
+Adjustments <- "PET.MGRUA_NUS_1.M"  #Demand
+stock_change <- "PET.MGRSCUS1.M"    #Stock
+Supply <- "PET.MGRUPUS1.M"           #Supply
+Ending_stock <- "PET.MGRSTUS1.M"      #Stock
+
+########### Getting Data ###########
+eia_df <- 
+  tibble::tribble(
+  ~ticker, ~param, ~type,
+  Production, "Production", "Demand", 
+  Adjustments, "Adjustments", "Demand",
+  stock_change, "Beg_Storage", "Stock",
+  Supply, "Supplied", "Supply",
+  Ending_stock,  "End_Storage", "Stock"
+  )  # create a data frame with all the tickers 
+# create data pull function to access EIA API pull data and clean and convert data to the correct formation
+data <- eia_df %>%
+  dplyr::mutate(key = "4d1df1f2cab976fcda3c066a4723d720") %>%
+  dplyr::mutate(data = purrr::map2(ticker, key, RTL::eia2tidy)) %>%
+  dplyr::select(param, type, data) %>% unnest()
+data
+```
+
+```{r}
+########### Observations ###########
+fig.title = "RBOB"
+library(scales)
+p1 <-
+  data %>% dplyr::filter(param %in% c("Production", "Adjustments", "Supplied")) %>%
+  ggplot(aes(x = date, y = value, color = param)) +
+  geom_line() +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle(fig.title)
+p1 %>% plotly::ggplotly()
+
+
+########### Wide Table ###########
+data2 <- data %>%
+  dplyr::filter(param %in% c("Production", "Adjustments", "Beg_Storage", "End_Storage","Supplied")) %>%
+  dplyr::filter(date > as.Date("2017-02-28")) %>%
+  dplyr::select(date, param, value) %>%
+  tidyr::pivot_wider(date, names_from = param, values_from = value) %>%
+  # arrange by date is required for na.locf() to replace with last observation
+  dplyr::arrange(date) %>%
+  dplyr::mutate(Production = zoo::na.locf(Production)) %>% tidyr::drop_na() %>%
+  dplyr::mutate(Storage = End_Storage-Beg_Storage) %>% 
+  select(c(date,Production,Adjustments,Supplied,Storage))
+
+data2 %>% mutate(diff = Production+Adjustments-Supplied)
+
+########### Charting wide table ###########
+fig.title = "RBOB"
+p <- data2 %>%
+  tidyr::pivot_longer(-date, names_to = "series", values_to = "value") %>%
+  ggplot(aes(x = date, y = value, color = series)) + geom_line() +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = fig.title, y = "kbd", x = "")
+p %>% plotly::ggplotly()
+```
+
+
+```{r}
+library(tidyverse)
+library(RTL) # 
+iuser = "morningstar.ctrd@ualberta.ca"
+ipassword = "k^ehE%&vbX"
+
+# Loading data
+tradeprocess <- RTL::getPrices(feed="CME_NymexFutures_EOD",contracts = c("RB0Y","CL21H","CU0W","NG29Z","BB25H"),
+                          from = "2018-01-01",iuser = iuser, ipassword = ipassword)
+tradeprocess
+
+########### Data Wrangling ###########
+df.long <-
+  tradeprocess %>% tidyr::pivot_longer(cols = -date,
+                                       names_to = "series",
+                                       values_to = "value") %>%
+  dplyr::mutate(value = case_when(
+    grepl("HO", series) ~ value * 42,
+    grepl("LT", series) ~ value * 42,
+    TRUE ~ value
+  ))
+
+df.long %>%
+  ggplot(aes(x = date, y = value, col = series)) + geom_line() +
+  labs(
+    title = "Data Converted to $/bbls ",
+    subtitle = "",
+    caption = "Source: Morningstar / CME",
+    x = "",
+    y = "USD per bbl"
+  )
+```
+
+```{r}
+########### Flat Price ###########
+fp <- df.long %>%
+  dplyr::filter(series == "RB0Y") %>%
+  dplyr::mutate(PL = value - dplyr::lag(value)) %>%
+  stats::na.omit() %>%
+  dplyr::select(-series) %>%
+  tidyr::pivot_longer(cols = -date,
+                      names_to = "series",
+                      values_to = "value")
+
+# Plot into two panels using facet_grid
+fp %>%
+  ggplot(aes(x = date, y = value)) + geom_bar(col = "blue", stat = "identity") +
+  facet_grid(series ~ ., scales = "free_y") +
+  labs(
+    title = "Strategy::Flat Price",
+    subtitle = "Price Evolution and Risk/Reward",
+    caption = "Source: Morningstar/CME",
+    x = "",
+    y = "$ per bbl"
+  )
+gg = filter(fp,series=="PL")
+sum(gg$value)
+```
+
+```{r}
+########### Crack Spread ###########
+cx <- df.long %>%
+  dplyr::filter(series %in% c("RB0Y", "CL21H")) %>%
+  tidyr::spread(series, -date) %>%
+  dplyr::transmute(
+    date = date,
+    value = CL21H-RB0Y,
+    PL = value - dplyr::lag(value)
+  ) %>%
+  stats::na.omit() %>%
+  tidyr::pivot_longer(cols = -date,
+                      names_to = "series",
+                      values_to = "value")
+
+# Plot into two panels using facet_grid
+cx %>%
+  ggplot(aes(x = date, y = value)) + geom_bar(col = "blue", stat = "identity") +
+  facet_grid(series ~ ., scales = "free_y") +
+  labs(
+    title = "Strategy::Crack Spread",
+    subtitle = "Price Evolution and Risk/Reward",
+    caption = "Source: Morningstar/CME",
+    x = "",
+    y = "$ per bbl"
+  )
+gg = filter(cx,series=="PL")
+sum(gg$value)
+```
+
+```{r}
+########### Chicago Ethanol Swap Spread ###########
+ex <- df.long %>%
+  dplyr::filter(series %in% c("RB0Y","CU0W")) %>%
+  tidyr::spread(series, -date) %>%
+  dplyr::transmute(
+    date = date,
+    value = CU0W-RB0Y,
+    PL = value - dplyr::lag(value)
+  ) %>%
+  stats::na.omit() %>%
+  tidyr::pivot_longer(cols = -date,
+                      names_to = "series",
+                      values_to = "value")
+
+# Plot into two panels using facet_grid
+ex %>%
+  ggplot(aes(x = date, y = value)) + geom_bar(col = "blue", stat = "identity") +
+  facet_grid(series ~ ., scales = "free_y") +
+  labs(
+    title = "Strategy::Ethanol Spread",
+    subtitle = "Price Evolution and Risk/Reward",
+    caption = "Source: Morningstar/CME",
+    x = "",
+    y = "$ per bbl"
+  )
+gg = filter(ex,series=="PL")
+sum(gg$value)
+```
+
+```{r}
+########### Natural Gas Spread ###########
+nx <- df.long %>%
+  dplyr::filter(series %in% c("RB0Y","NG29Z")) %>%
+  tidyr::spread(series, -date) %>%
+  dplyr::transmute(
+    date = date,
+    value = NG29Z-RB0Y ,
+    PL = value - dplyr::lag(value)
+  ) %>%
+  stats::na.omit() %>%
+  tidyr::pivot_longer(cols = -date,
+                      names_to = "series",
+                      values_to = "value")
+
+# Plot into two panels using facet_grid
+nx %>%
+  ggplot(aes(x = date, y = value)) + geom_bar(col = "blue", stat = "identity") +
+  facet_grid(series ~ ., scales = "free_y") +
+  labs(
+    title = "Strategy::Ethanol Spread",
+    subtitle = "Price Evolution and Risk/Reward",
+    caption = "Source: Morningstar/CME",
+    x = "",
+    y = "$ per bbl"
+  )
+
+gg = filter(nx,series=="PL")
+sum(gg$value)
+```
+
+```{r}
+########### Brent Crude Swap Spread ###########
+bc <- df.long %>%
+  dplyr::filter(series %in% c("RB0Y","BB25H")) %>%
+  tidyr::spread(series, -date) %>%
+  dplyr::transmute(
+    date = date,
+    value = RB0Y-BB25H ,
+    PL = value - dplyr::lag(value)
+  ) %>%
+  stats::na.omit() %>%
+  tidyr::pivot_longer(cols = -date,
+                      names_to = "series",
+                      values_to = "value")
+
+# Plot into two panels using facet_grid
+bc %>%
+  ggplot(aes(x = date, y = value)) + geom_bar(col = "blue", stat = "identity") +
+  facet_grid(series ~ ., scales = "free_y") +
+  labs(
+    title = "Strategy::BC Spread",
+    subtitle = "Price Evolution and Risk/Reward",
+    caption = "Source: Morningstar/CME",
+    x = "",
+    y = "$ per bbl"
+  )
+gg = filter(bc,series=="PL")
+sum(gg$value)
+```
+
+```{r}
+res <-
+  rbind(
+    fp %>% dplyr::filter(series != "value") %>% dplyr::mutate(series = "Flat Price"),
+    cx %>% dplyr::filter(series != "value") %>% dplyr::mutate(series =
+                                                                "Crack Spread"),
+    ex %>% dplyr::filter(series != "value") %>% dplyr::mutate(series =
+                                                                    "Ethanol Spread"),
+    nx %>% dplyr::filter(series != "value") %>% dplyr::mutate(series =
+                                                                    "NG Spread"),
+    bc %>% dplyr::filter(series != "value") %>% dplyr::mutate(series =
+                                                                    "BC Spread")
+  )
+
+res %>% ggplot(aes(x = value)) +
+  stat_density(mapping = (aes(y = ..scaled..)),
+               col = "blue",
+               fill = "blue") +
+  facet_grid(series ~ .) +
+  labs(
+    title = "Strategy PL Comparison",
+    x = "",
+    y = "$ per bbl"
+  )
+```
+
+
+

@@ -22,152 +22,29 @@ knitr::opts_chunk$set(echo = T,warning = F,message = F, fig.width = 4, fig.heigh
 
 + Do all your practice and experimentation prior to starting the assignment in this section.
 
-### First gotta find the data
-
-**So far:**
-
-[Supply and Disposition](https://www.eia.gov/dnav/pet/pet_sum_snd_d_nus_mbbl_m_cur.htm)
-<br /> _click on value for time series_
-
-#### **Supply**
-
-- [Storage](https://www.eia.gov/dnav/pet/pet_stoc_wstk_dcu_nus_w.htm)
--- [(monthly)](https://www.eia.gov/opendata/qb.php?sdid=PET.M_EPOBGRR_SAE_NUS_MBBL.M) 
-- [Imports](https://www.eia.gov/dnav/pet/pet_move_wkly_dc_NUS-Z00_mbblpd_w.htm)
--- [(monthly)](https://www.eia.gov/opendata/qb.php?sdid=PET.MO1IM_NUS-Z00_1.M) 
-<br/> _thousand barrels per day_
-- [Adjustments (monthly)](https://www.eia.gov/opendata/qb.php?sdid=PET.MO1UA_NUS_1.M)
-          
-The US does not produce its own RBOB. It imports them all.
-
-#### **Demand**
-- [Net Inputs](https://www.eia.gov/dnav/pet/pet_sum_sndw_dcus_nus_w.htm)
--- [(monthly)](https://www.eia.gov/opendata/qb.php?sdid=PET.MO1IM_NUS-Z00_1.M)
-<br/> _thousand barrels per day_
-- [Exports (monthly)](https://www.eia.gov/opendata/qb.php?sdid=PET.MO1EX_NUS-Z00_1.M)
-
-_all weekly data unless specified_
-        
-        
-        
-        
-
-```{r echo=FALSE, fig.width=8, fig.height=5}
+# SD Balance 
+```{r echo=FALSE, }
 require(tidyverse)
 require(purrr)
 require(RTL)
-
-
-#create param and ticker df
-
-
-###Done monthly
-#all in thousands of barrels
-eia_df <- tibble::tribble(
-  ~ticker, ~param, ~type,
-#supply
-  'PET.M_EPOBGRR_SAE_NUS_MBBL.M', 'Storage', 'Stocks',
-  'PET.MO1IM_NUS-Z00_1.M', 'Imports', 'Input',
-  'PET.MO1UA_NUS_1.M', 'Adjustments', 'Supply',
-#demand
-  'PET.M_EPOBGRR_YIR_NUS_MBBL.M', 'Demand(net inputs)', 'Production',
-  'PET.MO1EX_NUS-Z00_1.M', 'Exports', 'Output',
-  'PET.MGRRPUS1.M', 'Refined', 'Output' #reformulated gasoline production
-)
-
-data <- eia_df %>%
-   dplyr::mutate(key = '4d1df1f2cab976fcda3c066a4723d720') %>%
-   dplyr::mutate(data = purrr::map2(ticker, key, RTL::eia2tidy)) %>%
-   dplyr::select(param, type, data) %>% 
-   unnest(cols = data) %>%
-   dplyr::select(date,param,value)
-
-
-##Done weekly
-# ~ticker, ~param, ~type,
-# #supply
-#   'PET.W_EPOBGRR_SAE_NUS_MBBL.M', 'Storage', 'Stocks',
-#   'PET.W_EPOBGRR_IM0_NUS-Z00_MBBLD.W', 'Imports', 'Input',
-# #demand
-#   'PET.W_EPOBGRR_YIR_NUS_MBBLD.W', 'Demand(net inputs)', 'Production',
-#   'PET.MO1EX_NUS-Z00_1.M', 'Exports', 'Output
-
-
-
-multiplyBy7 <- function(x) {
-  xx = x * 7
-  return(xx)
-}
-
-#transform data
-# data <- data %>% pivot_wider(names_from = param, values_from=value) %>%
-#   #scale to weekly totals
-#   # dplyr::mutate_at(c('Imports','Demand(net inputs)'), multiplyBy7) %>% 
-#   #change in storage
-#   # dplyr::mutate(Storage = Storage - lag(Storage)) %>% 
-#   pivot_longer(cols = 2:ncol(data), names_to='param', values_to='value')
-
-fig.title = "US RBOB"
-library(scales)
-p1 <- data %>%  
-  # dplyr::filter(param %in% c("Storage", 
-  #                            "Imports", 
-  #                            "Exports", 
-  #                            "Demand(net inputs)", 
-  #                            "Adjustments")) %>%
-  ggplot(aes(x = date, y = value, color = param)) +
-  geom_line() +
-  scale_y_continuous(labels = scales::comma) +#,
-                     # limits = c(-5000,10000)) +
-  ggtitle(fig.title)
-
-plt <- p1 %>% plotly::ggplotly()
-plt
 ```
 
+
+#### **Supply**
+- Storage
+- Refined, produced,
+- Imports
+- 
+#### **Demand**
+- Consumption
+- Exports
 
 #### **The SD Balance formula is:**
-
-##### $imports + adjustments \approx demand + delta(stock) +export$
-
-### Market View:
-
-##### SD Indicators:
-- Motor Gasoline consumption
-```{r echo=FALSE}
-# petroleum weekly report: https://www.eia.gov/dnav/pet/pet_sum_sndw_dcus_nus_w.htm
-#monthly
-#PET.MD0UP_NUS_2.M
-#weekly
-# PET.WGFUPUS2.W - THOUSAND BARRELS PER DAY
-```
-
-- Stock of motor gasoline
-```{r echo=FALSE}
-#weekly
-# PET.WGFSTUS1.W - THOUSAND BARRELS
-# PET.W_EPM0F_EEX_NUS-Z00_MBBLD.W - Reformulated - THOUSAND BARRELS
-```
-
-- Exports of motor Gasoline
-```{r echo=FALSE}
-#weekly
-# PET.W_EPM0F_EEX_NUS-Z00_MBBLD.W - THOUSAND BARRELS PER DAY
-```
-- Gasoline Production
-```{r}
-#weekly
-# PET.WGRRPUS2.W BARRELS PER DAY
-```
-
-
-
-Maybe also refiner blender net production of gasoline.
-US does not import reformulated motor gasoline
+##### $imports + production \approx consumption + delta(stock) +exports$
 
 ```{r echo=FALSE, fig.width=8, fig.height=5}
 
-#https://www.eia.gov/petroleum/weekly/gasoline.php
+#### https://www.eia.gov/petroleum/weekly/gasoline.php
 
 eia_fin_gasoline <- tibble::tribble(
   ~ticker, ~param, ~type,
@@ -179,7 +56,13 @@ eia_fin_gasoline <- tibble::tribble(
   
   # 'PET.W_EPM0_VSD_NUS_DAYS.W', 'days_supply', 'stock',
   
-  'PET.WGFUPUS2.W', 'consumption', 'input',
+  'PET.WGFRPUS2.W', 'gasoline_production', 'input',
+  # per DAY
+  
+  # 'PET.WGRRPUS2.W', 'reformulated_gasoline_production', 'input', #reformulated gasoline 
+  # per DAY
+  
+  # 'PET.WG4TP_NUS_2.W', 'conventional_gasoline_production', 'input',
   # per DAY
   
   'PET.W_EPM0F_IM0_NUS-Z00_MBBLD.W','gasoline_imports','input', 
@@ -188,16 +71,13 @@ eia_fin_gasoline <- tibble::tribble(
   # 'PET.WBCIMUS2.W', 'blending_components_imports', 'input',
   # per DAY
   
+  'PET.WGFUPUS2.W', 'consumption', 'output',
+  # per DAY
+  
   'PET.W_EPM0F_EEX_NUS-Z00_MBBLD.W', 'gasoline_exports', 'output',
   # per DAY
   
-  'PET.WGFRPUS2.W', 'gasoline_production', 'output',
-  # per DAY
-  
-  # 'PET.WGRRPUS2.W', 'reformulated_gasoline_production', 'output', #reformulated gasoline 
-  # per DAY
-  
-  # 'PET.WG4TP_NUS_2.W', 'conventional_gasoline_production', 'output',
+  # 'PET.MGFUA_NUS_2.M', 'adjustments', 'input',
   # per DAY
   
   'PET.EER_EPMRR_PF4_Y05LA_DPG.D', 'rbob_spot' , 'spot',
@@ -212,25 +92,37 @@ gasoline_data <- eia_fin_gasoline %>%
    unnest(cols = data) %>% 
    dplyr::select(date,param,value, type)
 
-# maxcols = n_distinct(gasoline_data['param']) + 1
-
 gasoline_data <- gasoline_data %>%  
   dplyr::mutate(value = case_when(type=='spot' ~ value*42,
                                   type!='stock' ~ value*7,
-                                  TRUE ~ value)) %>% 
-  dplyr::mutate()
+                                  TRUE ~ value))
+
+
+  #### storage implied
+
+
+gasoline_data %>% 
+  pivot_wider(names_from = param, values_from = value) %>% 
+  dplyr::mutate('est_delta_stock' = (gasoline_imports + gasoline_production - 
+                                       consumption - gasoline_exports + adjustments),
+                'delta_stock' = total_gasoline_stock - lag(total_gasoline_stock),
+                'error' = delta_stock-est_delta_stock) %>% 
+  dplyr::select(delta_stock, est_delta_stock, error) %>% 
+  na.omit()
+  
+  
 
 
 ############-------------------------Plot SD model
-motor_gas_plt2 <- gasoline_data %>% 
+gasoline_plt <- gasoline_data %>% 
+  # Compare to changes in price/days of supply
   # dplyr::mutate(value = case_when(param=='days_supply' ~ value*1000,
   #                                 param=='rbob_spot' ~ value*1000,
   #                                 TRUE ~ value)) %>% 
   dplyr::filter(param %in% c('gasoline_production',
                              'consumption',
                              'gasoline_imports',
-                             'gasoline_exports',
-                             'total_gasoline_stock')) %>% 
+                             'gasoline_exports')) %>% 
   ggplot(aes(x=date)) +
   geom_line(aes(y=value,color=param)) +
   scale_y_continuous(name = 'Thousand Barrels per week',
@@ -241,11 +133,8 @@ motor_gas_plt2 <- gasoline_data %>%
 
 #The US consumes all it produces. + imports the rest. not much is saved in storage
 
-motor_gas_plt2
-motor_gas_plt2 %>% plotly::ggplotly()
-
-
-#check actual storage change vs implied
+gasoline_plt
+gasoline_plt %>% plotly::ggplotly()
 
 
 #eia outlook
@@ -262,13 +151,10 @@ library(zoo)
 library(lubridate)
 library(tidyselect)
 
-
-#REGRESSION
+########### DATA WRANGLING
 
 # filter date:
 # tail(gasoline_data_wide[c('date', 'gasoline_exports')] %>% na.omit())
-
-
 getSeason <- function(x) {
   WS <- as.Date("2012-12-15", format = "%Y-%m-%d") # Winter Solstice
   SE <- as.Date("2012-3-15",  format = "%Y-%m-%d") # Spring Equinox
@@ -288,25 +174,53 @@ getSeason <- function(x) {
 
 gasoline_data_wide <- gasoline_data %>% select(-type) %>% 
   pivot_wider(names_from = param, values_from = value) %>% 
-  # filter(date>'2010-06-04') %>%
-  # zoo::na.locf(na.rm = TRUE) %>%
+  filter(date>'2010-06-04') %>% na.omit()
   # dplyr::mutate_if(is.numeric, ~ (log(.x) - log(lag(.x)))) %>%
-  # dplyr::mutate_at(vars(matches('total_gasoline_stock')), ~ (log(.x) - log(lag(.x)))) %>% 
-  na.omit()
 
-
+#Add seasons
 gasoline_data_wide <- gasoline_data_wide %>% 
   mutate(season = purrr::map_chr(.x = date, .f = getSeason))
 
-# gasoline_data_wide
 
+#Add OPEC World prooduction
+# Crude Oil Production
+opec_df <- tribble(~ticker, ~param,
+                   'STEO.COPR_OPEC.M', 'OPEC_production',
+                   'PET.MGFRZ_NUS_2.M', 'gasoline_production',
+                   'PET.MGFUPUS2.M', 'consumption',
+                   'PET.EER_EPMRR_PF4_Y05LA_DPG.D', 'rbob_spot') %>% 
+   dplyr::mutate(key = '4d1df1f2cab976fcda3c066a4723d720') %>%
+   dplyr::mutate(data = purrr::map2(ticker, key, RTL::eia2tidy)) %>%
+   dplyr::select(param, data) %>% 
+   unnest(cols = data) %>% 
+   dplyr::select(date,param,value) %>%
+  #Convert to 1000 barrels/day
+  dplyr::mutate(value = case_when(param=='OPEC_production' ~ value*1000,
+                                  param=='rbob_spot' ~ value*42*100+18000,
+                                  TRUE ~ value))
+  
+
+opec_plt <- opec_df %>% filter(date>"1994-01-01") %>% filter(param %in% c('OPEC_production',
+                                                                          'rbob_spot')) %>% 
+  ggplot(aes(x=date,y=value,color=param)) + 
+  geom_line() +
+  scale_y_continuous(name = 'Thousand Barrels per month',
+                     sec.axis = sec_axis(~./4200-4.2857, name = "RBOB Spot price/1000 barrels"),
+                     labels = scales::comma)
+  
+opec_plt
+opec_plt %>% plotly::ggplotly() 
+        
+```
+
+```{r echo=FALSE}
 library(rsample)
 library(recipes)
 library(parsnip)
 library(broom)
 library(yardstick)
 
-set.seed(131)
+set.seed(121)
 
 #split the data
 gasoline_split <- gasoline_data_wide %>% initial_split(prop = 3/4)
@@ -434,29 +348,15 @@ prophet::prophet_plot_components(df, forecast)
 
 ```
 
-
-```{r}
-############### OPEC MODELING
-
-#download opec
-
-```
-
-
-
-
-Another SD indicator: Regulation
-
-
 ## **Strategies**
 
 #### Over 50% of crude is converted into gasoline.
 ```{r echo=FALSE}
 
+##################################### Trading strategy
 mstar <- c('morningstar.ctrd@ualberta.ca','k^ehE%&vbX')
 
-#generate contracts
-
+# generate contracts
 generateContracts <- function(tick, first_year, last_year, month_1, month_2) {
   
   yrs = seq(from = first_year, to=last_year, by=1)

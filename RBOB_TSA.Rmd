@@ -1,5 +1,5 @@
 ---
-title: "TSA - YOUR COMMODODITY"
+title: "TSA - RBOB"
 author: "Eduardo Vega, Danial Sheikh, Bo Sang"
 date: "`r Sys.Date()`"
 output: html_document
@@ -99,16 +99,14 @@ gasoline_data <- gasoline_data %>%
 
 
   #### storage implied
-
-
-gasoline_data %>% 
-  pivot_wider(names_from = param, values_from = value) %>% 
-  dplyr::mutate('est_delta_stock' = (gasoline_imports + gasoline_production - 
-                                       consumption - gasoline_exports + adjustments),
-                'delta_stock' = total_gasoline_stock - lag(total_gasoline_stock),
-                'error' = delta_stock-est_delta_stock) %>% 
-  dplyr::select(delta_stock, est_delta_stock, error) %>% 
-  na.omit()
+# gasoline_data %>% 
+#   pivot_wider(names_from = param, values_from = value) %>% 
+#   dplyr::mutate('est_delta_stock' = (gasoline_imports + gasoline_production - 
+#                                        consumption - gasoline_exports + adjustments),
+#                 'delta_stock' = total_gasoline_stock - lag(total_gasoline_stock),
+#                 'error' = delta_stock-est_delta_stock) %>% 
+#   dplyr::select(delta_stock, est_delta_stock, error) %>% 
+#   na.omit()
   
   
 
@@ -150,6 +148,8 @@ gasoline_plt %>% plotly::ggplotly()
 library(zoo)
 library(lubridate)
 library(tidyselect)
+library(jsonlite)
+library(janitor)
 
 ########### DATA WRANGLING
 
@@ -182,13 +182,66 @@ gasoline_data_wide <- gasoline_data_wide %>%
   mutate(season = purrr::map_chr(.x = date, .f = getSeason))
 
 
-#Add OPEC World prooduction
-# Crude Oil Production
+#A dd OPEC World prooduction of crude, consumption by padd, and state pop
+
+## Download state pop from 2010-19
+census.key <- 'd5085c233aa8f9434cc14a4b7488c37bbdd7e3ff'
+census.api <- 'https://api.census.gov/data/2019/pep/population?get=NAME,POP,DATE_CODE&for=state:*&key='
+url.census <- paste0(census.api,census.key)
+
+qqq <- fromJSON(url.census) %>% 
+  janitor::row_to_names(row_number = 1,remove_row = TRUE) %>% 
+  as_tibble(validate = F)
+
+states_pop <- qqq %>% select(-state) %>% 
+  mutate(POP = as.numeric(POP)) %>% 
+  pivot_wider(names_from = 'NAME', values_from = 'POP') %>% 
+  filter(DATE_CODE!=c(1,2)) %>% 
+  mutate('date' = as.Date('2010-7-1') + years(x = as.numeric(DATE_CODE)-3)) %>% 
+  select(date, everything(), -DATE_CODE) %>% 
+# Calculate percent change 
+  mutate_if(is.numeric, ~ (.x-lag(.x))/lag(.x)) %>%
+  na.omit()
+
+states_pop_long <- states_pop %>% 
+  pivot_longer(cols = 2:ncol(states_pop), names_to = 'state', values_to='pop_change') %>% 
+  mutate(padd = case_when(state %in% padd1 ~ 1,
+                          state %in% padd2 ~ 2,
+                          state %in% padd3 ~ 3,
+                          state %in% padd4 ~ 4,
+                          state %in% padd5 ~ 5)) %>% 
+  dplyr::group_by(padd, date) %>% 
+  na.omit()
+  
+#plotting pop_change
+pop_plt <- states_pop_long %>% summarise('pop_growth' = sum(pop_change)) %>% 
+  ggplot(aes(x=date, y=pop_growth, fill=as.factor(padd))) + 
+  geom_bar(stat = 'identity', position = 'stack')
+
+
+
+padd1 <- c('Connecticut', 'Maine', 'Massachusetts', 'New Hampshire', 'Rhode Island', 'Vermont', 'Delaware', 'District of Columbia', 'Maryland', 'New Jersey', 'New York', 'Pennsylvania', 'Florida', 'Georgia', 'North Carolina', 'South Carolina', 'Virginia', 'West Virginia') 
+padd2 <- c('Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Michigan', 'Minnesota', 'Missouri', 'Nebraska', 'North Dakota', 'Ohio', 'Oklahoma', 'South Dakota', 'Tennessee', 'Wisconsin')
+padd3 <- c('Alabama', 'Arkansas', 'Louisiana', 'Mississippi', 'New Mexico', 'Texas')
+padd4 <- c('Colorado', 'Idaho', 'Montana', 'Utah', 'Wyoming')
+padd5 <- c('Alaska', 'Arizona', 'California', 'Hawaii', 'Nevada', 'Oregon', 'Washington')
+
+
+
+
+
+
 opec_df <- tribble(~ticker, ~param,
                    'STEO.COPR_OPEC.M', 'OPEC_production',
-                   'PET.MGFRZ_NUS_2.M', 'gasoline_production',
-                   'PET.MGFUPUS2.M', 'consumption',
-                   'PET.EER_EPMRR_PF4_Y05LA_DPG.D', 'rbob_spot') %>% 
+                   #consumption
+                   'PET.MGFUPP12.M', 'ec_padd1',
+                   'PET.MGFUPP22.M', 'midw_padd2',
+                   'PET.MGFUPP32.M', 'gc_padd3',
+                   'PET.MGFUPP42.M', 'rm_padd4',
+                   'PET.MGFUPP52.M', 'wc_padd5',
+                   # 'PET.MGFUPUS2.M', 'consumption',
+                   'PET.EER_EPMRR_PF4_Y05LA_DPG.D', 'rbob_spot',
+                   ) %>% 
    dplyr::mutate(key = '4d1df1f2cab976fcda3c066a4723d720') %>%
    dplyr::mutate(data = purrr::map2(ticker, key, RTL::eia2tidy)) %>%
    dplyr::select(param, data) %>% 
@@ -196,20 +249,22 @@ opec_df <- tribble(~ticker, ~param,
    dplyr::select(date,param,value) %>%
   #Convert to 1000 barrels/day
   dplyr::mutate(value = case_when(param=='OPEC_production' ~ value*1000,
-                                  param=='rbob_spot' ~ value*42*100+18000,
+                                  # param=='rbob_spot' ~ value*42*100+18000, #4200-4.2857
+                                  param=='rbob_spot' ~ value*500+500,
                                   TRUE ~ value))
   
 
-opec_plt <- opec_df %>% filter(date>"1994-01-01") %>% filter(param %in% c('OPEC_production',
-                                                                          'rbob_spot')) %>% 
+opec_plt <- opec_df %>% filter(date>"1994-01-01") %>% filter(!param %in% c('OPEC_production',
+                                                                           'rbob_spot')) %>% 
   ggplot(aes(x=date,y=value,color=param)) + 
   geom_line() +
   scale_y_continuous(name = 'Thousand Barrels per month',
-                     sec.axis = sec_axis(~./4200-4.2857, name = "RBOB Spot price/1000 barrels"),
+                     sec.axis = sec_axis(~./500-1, name = "RBOB Spot price/1000 barrels"),
                      labels = scales::comma)
-  
+
 opec_plt
 opec_plt %>% plotly::ggplotly() 
+pop_plt
         
 ```
 

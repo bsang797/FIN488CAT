@@ -25,8 +25,10 @@ knitr::opts_chunk$set(echo = T,warning = F,message = F, fig.width = 4, fig.heigh
 # SD Balance 
 ```{r echo=FALSE, }
 require(tidyverse)
+require(tidyquant)
 require(purrr)
 require(RTL)
+library(riem)
 ```
 
 
@@ -48,34 +50,26 @@ require(RTL)
 
 eia_fin_gasoline <- tibble::tribble(
   ~ticker, ~param, ~type,
+  
+  #Stock
   'PET.WGTSTUS1.W', 'total_gasoline_stock', 'stock',
+  'PET.WGFSTUS1.W', 'gasoline_stock', 'stock',
+  'PET.WBCSTUS1.W', 'blending_components_stock', 'stock',
+  'PET.W_EPM0_VSD_NUS_DAYS.W', 'days_supply', 'stock',
   
-  # 'PET.WGFSTUS1.W', 'gasoline_stock', 'stock',
+  # Inputs
+  'PET.WGFRPUS2.W', 'gasoline_production', 'input', # per DAY. Reform. and Conventional
+  'PET.WGRRPUS2.W', 'reformulated_gasoline_production', 'input', # per DAY
+  'PET.WG4TP_NUS_2.W', 'conventional_gasoline_production', 'input', # per DAY
+  'PET.W_EPOOXE_YOP_NUS_MBBLD.W', 'fuel_ethanol_production', 'input',
+  ################# imports
+  'PET.W_EPM0F_IM0_NUS-Z00_MBBLD.W','finished_gasoline_imports','input', # per DAY
+  'PET.WBCIMUS2.W', 'blending_components_imports', 'input', # per DAY
   
-  # 'PET.WBCSTUS1.W', 'blending_components_stock', 'stock',
+  # Outputs
+  'PET.WGFUPUS2.W', 'consumption', 'output', # per DAY
+  'PET.W_EPM0F_EEX_NUS-Z00_MBBLD.W', 'finished_gasoline_exports', 'output', # per DAY
   
-  # 'PET.W_EPM0_VSD_NUS_DAYS.W', 'days_supply', 'stock',
-  
-  'PET.WGFRPUS2.W', 'gasoline_production', 'input',
-  # per DAY
-  
-  # 'PET.WGRRPUS2.W', 'reformulated_gasoline_production', 'input', #reformulated gasoline 
-  # per DAY
-  
-  # 'PET.WG4TP_NUS_2.W', 'conventional_gasoline_production', 'input',
-  # per DAY
-  
-  'PET.W_EPM0F_IM0_NUS-Z00_MBBLD.W','gasoline_imports','input', 
-  # per DAY
-  
-  # 'PET.WBCIMUS2.W', 'blending_components_imports', 'input',
-  # per DAY
-  
-  'PET.WGFUPUS2.W', 'consumption', 'output',
-  # per DAY
-  
-  'PET.W_EPM0F_EEX_NUS-Z00_MBBLD.W', 'gasoline_exports', 'output',
-  # per DAY
   
   # 'PET.MGFUA_NUS_2.M', 'adjustments', 'input',
   # per DAY
@@ -84,6 +78,10 @@ eia_fin_gasoline <- tibble::tribble(
   # dollars per gallon
 
 )
+
+tidyquant::quandl_api_key("4xU_yj1yptrrfDsjkDeK")
+tq_get()
+
 
 gasoline_data <- eia_fin_gasoline %>%
    dplyr::mutate(key = '4d1df1f2cab976fcda3c066a4723d720') %>%
@@ -120,7 +118,11 @@ gasoline_plt <- gasoline_data %>%
   dplyr::filter(param %in% c('gasoline_production',
                              'consumption',
                              'gasoline_imports',
-                             'gasoline_exports')) %>% 
+                             'gasoline_exports',
+                             'total_gasoline_stock',
+                             'gasoline_stock',
+                             'blending_components_stock'
+                             )) %>% 
   ggplot(aes(x=date)) +
   geom_line(aes(y=value,color=param)) +
   scale_y_continuous(name = 'Thousand Barrels per week',
@@ -141,6 +143,7 @@ gasoline_plt %>% plotly::ggplotly()
 
 # On a volume basis, U.S. consumption of gasoline declined by more than other petroleum products in 2020. EIA forecasts that U.S. gasoline consumption will rise in the forecast but remain lower than 2019 levels. U.S. gasoline consumption is forecast to average 8.6 million b/d in 2021 and 8.9 million b/d in 2022, up from 8.0 million b/d in 2020 but lower than the 9.3 million b/d consumed in 2019.
 
+riem_networks()
 ```
 
 

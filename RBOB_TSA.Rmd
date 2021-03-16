@@ -1,0 +1,105 @@
+---
+title: "TSA - YOUR COMMODODITY"
+author: "team member names"
+date: "`r Sys.Date()`"
+output: html_document
+resource_files:
+- TSA_template.Rmd
+- TSA_template.Rmd
+---
+
+<style type="text/css"> body, td {font-size: 12px;} code.r{font-size: 10px;} pre {font-size: 10px} </style>
+
+```{r, echo = F}
+knitr::opts_chunk$set(echo = T,warning = F,message = F, fig.width = 4, fig.height = 3,fig.align = "center",tidy = FALSE, strip.white = TRUE)
+```
+
+**this template is a guide to organize your project in a clear manner**
+
+**quality of presentation refers amongst others to showing code, tables and charts in a manner that flows with your story. Details and computations shall remain in the code chunks without being rendered into the html output.**
+
+## Experimentation Part
+
++ Do all your practice and experimentation prior to starting the assignment in this section.
+
+**Disregard the sections below for the time being**
+
+## Summary
+
+### What's changed
+
+### Current Exposure
+
+### New Trades if any
+
+## Form a Market View
+
+### Supply Demand Indicators
+
+Build a SD balance dashboard to support forming and explaining a market view below.
+
+```{r}
+# You are expected to build your own SD balance from the EIA and other website APIs
+# The following is an example of series names for Crude SD components to get you going.
+# It is by no means a substitute for doing your own research
+library(RTL)
+data("tickers_eia")
+tickers_eia %>% dplyr::filter(product == "crude")
+```
+
++ Clearly laid out components of SD balances.
++ State why they matter.
++ Provide both long term and short term views. Your trade horizon is weekly - can you identify clearly from the chart when a change occurs?
+
+### Market View
+
++ View based on SD indicators ensuring that your conclusions are clearly readable from your charts.
++ Build analytics that is relevant to your current view.
++ If you have explored more, put them in an appendix. 
+
+## Desired Exposure
+
+Translating your market view into strength of market call and allocate risk versus maximum limit
+
++ Evidence of converting market view into a strength of market call.
++ Strength of market call translates into allocating risk allocation vs your limits.
+
+## Monetization Strategies
+
++ Evidence of exploring what we have covered in class.
++ How do you take those further with exploring various combinations along the grade, delivery location and delivery timing axis.
++ Diligence in being nimble in those in light of evolving market context.
+
+## Risk Appetite
+
++ Allocate risk in the context of risk reward ensuring capital preservation.
++ Evidence of a basic framework that you utilize to make your decision. Best is if you can articulate it clearly and quantify it.
+
+## Execution
+
++ What trades are you executing? 
++ Rationale stated clearly?
++ Entry/ Exit levels stated?
++ 
+
+## Profit and Loss ("PL" Attribution
+
+For each strategy:
+
++ Provide a grid of PL attribution by risk factors (flat price, time spread, crack,) 
++ Is it in line with your market call? Learnings...
+
+## Lessons Learned
+
+What have you learned from this project?
+
+## Questions for Weekly Meeting with Prof
+
+1. a...
+2. b...
+
+
+
+
+
+

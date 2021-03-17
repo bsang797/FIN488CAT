@@ -34,9 +34,9 @@ library(riem)
 
 #### **Supply**
 - Storage
-- Refined, produced,
+- Refined (produced)
 - Imports
-- 
+
 #### **Demand**
 - Consumption
 - Exports
@@ -45,7 +45,6 @@ library(riem)
 ##### $imports + production \approx consumption + delta(stock) +exports$
 
 ```{r echo=FALSE, fig.width=8, fig.height=5}
-
 #### https://www.eia.gov/petroleum/weekly/gasoline.php
 
 eia_fin_gasoline <- tibble::tribble(
@@ -127,8 +126,6 @@ gasoline_plt <- gasoline_data %>%
                date_labels = '%Y')
 
 #The US consumes all it produces. + imports the rest. not much is saved in storage
-
-gasoline_plt
 gasoline_plt %>% plotly::ggplotly()
 
 
@@ -142,16 +139,21 @@ gasoline_plt %>% plotly::ggplotly()
 #  refinery or pipeline problems or reductions in imports cause unexpected declines in supply, gasoline stocks may drop rapidly. This drop in inventories may cause wholesalers to bid higher for available supply over concern that future supplies may not be adequate.
 # 
 # Imbalances may also occur when a region changes from one gasoline formulation to another, and refiners, distributors, and marketers adjust supply for the new product.
-riem_networks()
 
-
-gasoline_stock ~ spot. production.
-
+# riem_networks()
 # rbob_spot ~ gdp, 
 ```
+### From the chart:
+<p>The stock of finished motor gasoline has declined massively over the past 20 years. So the US is stacking up on blending components such as RBOB and CBOB for refining different types of gasoline depending on the states regulations on what are the components of its gasoline. The most populous areas such as New York City or the state of Californian use reformulated gasoline (oxygenated), while the other areas use conventional. RBOB is the benchmark price of gasoline.</p>
+<p>There are big swing in the storage, and so we stack up in the first months of the year, December to February and deplete the stock from March to November.</p>
+<p>We believe there RBOB prices will go up for two reasons:</p>
+ 1. Production of gasoline closely follows consumption, and we will see a raise back to normality after the pandemic.
+ 2. The US is exporting more since 2016, coupled with a higher gasoline demand worldwide after the pandemic.
+ 3. Increase demand for blending components. The imports have been in an increasing trend since 1996. Notably from Canada, Netherlands and UK.
 
 
-```{r echo=FALSE}
+# Analysis, Market View
+```{r echo=FALSE, fig.width=8, fig.height=5}
 library(zoo)
 library(lubridate)
 library(tidyselect)
@@ -160,8 +162,6 @@ library(janitor)
 
 ########### DATA WRANGLING
 
-# filter date:
-# tail(gasoline_data_wide[c('date', 'gasoline_exports')] %>% na.omit())
 getSeason <- function(x) {
   WS <- as.Date("2012-12-15", format = "%Y-%m-%d") # Winter Solstice
   SE <- as.Date("2012-3-15",  format = "%Y-%m-%d") # Spring Equinox
@@ -174,27 +174,32 @@ getSeason <- function(x) {
   ifelse (d >= WS | d < SE, "Winter",
     ifelse (d >= SE & d < SS, "Spring",
       ifelse (d >= SS & d < FE, "Summer", "Fall")))
-  
-  
 }
+
 
 
 gasoline_data_wide <- gasoline_data %>% select(-type) %>% 
   pivot_wider(names_from = param, values_from = value) %>% 
-  filter(date>'2010-06-04') %>% na.omit()
-  # dplyr::mutate_if(is.numeric, ~ (log(.x) - log(lag(.x)))) %>%
+  filter(!is.na(finished_gasoline_exports))
+# gasoline_data_wide %>% count(year(date))
+# plot(gasoline_data_wide$date)
 
 #Add seasons
 gasoline_data_wide <- gasoline_data_wide %>% 
   mutate(season = purrr::map_chr(.x = date, .f = getSeason))
 
-
-#A dd OPEC World prooduction of crude, consumption by padd, and state pop
-
 ## Download state pop from 2010-19
 census.key <- 'd5085c233aa8f9434cc14a4b7488c37bbdd7e3ff'
 census.api <- 'https://api.census.gov/data/2019/pep/population?get=NAME,POP,DATE_CODE&for=state:*&key='
 url.census <- paste0(census.api,census.key)
+
+
+padd1 <- c('Connecticut', 'Maine', 'Massachusetts', 'New Hampshire', 'Rhode Island', 'Vermont', 'Delaware', 'District of Columbia', 'Maryland', 'New Jersey', 'New York', 'Pennsylvania', 'Florida', 'Georgia', 'North Carolina', 'South Carolina', 'Virginia', 'West Virginia') 
+padd2 <- c('Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Michigan', 'Minnesota', 'Missouri', 'Nebraska', 'North Dakota', 'Ohio', 'Oklahoma', 'South Dakota', 'Tennessee', 'Wisconsin')
+padd3 <- c('Alabama', 'Arkansas', 'Louisiana', 'Mississippi', 'New Mexico', 'Texas')
+padd4 <- c('Colorado', 'Idaho', 'Montana', 'Utah', 'Wyoming')
+padd5 <- c('Alaska', 'Arizona', 'California', 'Hawaii', 'Nevada', 'Oregon', 'Washington')
+
 
 qqq <- fromJSON(url.census) %>% 
   janitor::row_to_names(row_number = 1,remove_row = TRUE) %>% 
@@ -223,15 +228,9 @@ states_pop_long <- states_pop %>%
 #plotting pop_change
 pop_plt <- states_pop_long %>% summarise('pop_growth' = sum(pop_change)) %>% 
   ggplot(aes(x=date, y=pop_growth, fill=as.factor(padd))) + 
-  geom_bar(stat = 'identity', position = 'stack')
+  geom_bar(stat = 'identity', position = 'dodge') +
+  labs(title = "Population growth per PADD")
 
-
-
-padd1 <- c('Connecticut', 'Maine', 'Massachusetts', 'New Hampshire', 'Rhode Island', 'Vermont', 'Delaware', 'District of Columbia', 'Maryland', 'New Jersey', 'New York', 'Pennsylvania', 'Florida', 'Georgia', 'North Carolina', 'South Carolina', 'Virginia', 'West Virginia') 
-padd2 <- c('Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Michigan', 'Minnesota', 'Missouri', 'Nebraska', 'North Dakota', 'Ohio', 'Oklahoma', 'South Dakota', 'Tennessee', 'Wisconsin')
-padd3 <- c('Alabama', 'Arkansas', 'Louisiana', 'Mississippi', 'New Mexico', 'Texas')
-padd4 <- c('Colorado', 'Idaho', 'Montana', 'Utah', 'Wyoming')
-padd5 <- c('Alaska', 'Arizona', 'California', 'Hawaii', 'Nevada', 'Oregon', 'Washington')
 
 
 
@@ -240,7 +239,7 @@ padd5 <- c('Alaska', 'Arizona', 'California', 'Hawaii', 'Nevada', 'Oregon', 'Was
 
 opec_df <- tribble(~ticker, ~param,
                    'STEO.COPR_OPEC.M', 'OPEC_production',
-                   #consumption
+                   #consumption per PADD
                    'PET.MGFUPP12.M', 'ec_padd1',
                    'PET.MGFUPP22.M', 'midw_padd2',
                    'PET.MGFUPP32.M', 'gc_padd3',
@@ -267,146 +266,148 @@ opec_plt <- opec_df %>% filter(date>"1994-01-01") %>% filter(!param %in% c('OPEC
   geom_line() +
   scale_y_continuous(name = 'Thousand Barrels per month',
                      sec.axis = sec_axis(~./500-1, name = "RBOB Spot price/1000 barrels"),
-                     labels = scales::comma)
+                     labels = scales::comma) %>% 
+  labs(title = "Consumption and storage per PADD.")
 
-opec_plt
+# opec_plt
 opec_plt %>% plotly::ggplotly() 
-pop_plt
+pop_plt %>% plotly::ggplotly()
         
 ```
 
+
 ```{r echo=FALSE}
-library(rsample)
-library(recipes)
-library(parsnip)
-library(broom)
-library(yardstick)
-
-set.seed(121)
-
-#split the data
-gasoline_split <- gasoline_data_wide %>% initial_split(prop = 3/4)
-gasoline_train <- training(gasoline_split)
-gasoline_test <-  testing(gasoline_split)
-
-
-#recipe
-gasoline_recipe <- recipes::recipe(formula = rbob_spot ~ ., data = gasoline_data_wide) %>%
-  step_dummy(season, one_hot = TRUE) %>%
-  step_arrange(date) %>% 
-  # step_rm(date) %>%
-  step_rm(rbob_spot) %>% 
-  prep()
-
-# summary(gasoline_recipe)
-  
-
-gasoline_train_baked <- recipes::bake(object = gasoline_recipe,
-                                      new_data = gasoline_train)
-gasoline_test_baked <- recipes::bake(object = gasoline_recipe,
-                                      new_data = gasoline_test)
-gasoline_baked <- recipes::bake(object = gasoline_recipe,
-                                      new_data = gasoline_data_wide)
+# library(rsample)
+# library(recipes)
+# library(parsnip)
+# library(broom)
+# library(yardstick)
+# 
+# set.seed(121)
+# 
+# #split the data
+# gasoline_split <- gasoline_data_wide %>% initial_split(prop = 3/4)
+# gasoline_train <- training(gasoline_split)
+# gasoline_test <-  testing(gasoline_split)
+# 
+# 
+# #recipe
+# gasoline_recipe <- recipes::recipe(formula = rbob_spot ~ ., data = gasoline_data_wide) %>%
+#   step_dummy(season, one_hot = TRUE) %>%
+#   step_arrange(date) %>% 
+#   # step_rm(date) %>%
+#   step_rm(rbob_spot) %>% 
+#   prep()
+# 
+# # summary(gasoline_recipe)
+#   
+# 
+# gasoline_train_baked <- recipes::bake(object = gasoline_recipe,
+#                                       new_data = gasoline_train)
+# gasoline_test_baked <- recipes::bake(object = gasoline_recipe,
+#                                       new_data = gasoline_test)
+# gasoline_baked <- recipes::bake(object = gasoline_recipe,
+#                                       new_data = gasoline_data_wide)
 ```
 
 
 ```{r echo=FALSE}
-#regresison models
-gasoline_regmodel <- parsnip::linear_reg() %>% 
-  set_engine('lm') %>% 
-  set_mode('regression') %>% 
-  fit(rbob_spot ~ ., data = gasoline_train_baked)
-
-#Model specs
-gasoline_regmodel
-# gasoline_regmodel %>% broom::tidy()
-# summary(gasoline_regmodel)
-
-
-#predict
-rbob_spot_pred <- parsnip::predict.model_fit(gasoline_regmodel, gasoline_test_baked %>% select(-rbob_spot))
-results <- gasoline_test_baked %>% select(rbob_spot) %>% bind_cols(rbob_spot_pred)
-
-results %>% yardstick::mae(truth = .[[1]],
-                           estimate = .[[2]])
-
-results %>% yardstick::rsq(truth = .[[1]],
-                           estimate = .[[2]])
+# #regresison models
+# gasoline_regmodel <- parsnip::linear_reg() %>% 
+#   set_engine('lm') %>% 
+#   set_mode('regression') %>% 
+#   fit(rbob_spot ~ ., data = gasoline_train_baked)
+# 
+# #Model specs
+# gasoline_regmodel
+# # gasoline_regmodel %>% broom::tidy()
+# # summary(gasoline_regmodel)
+# 
+# 
+# #predict
+# rbob_spot_pred <- parsnip::predict.model_fit(gasoline_regmodel, gasoline_test_baked %>% select(-rbob_spot))
+# results <- gasoline_test_baked %>% select(rbob_spot) %>% bind_cols(rbob_spot_pred)
+# 
+# results %>% yardstick::mae(truth = .[[1]],
+#                            estimate = .[[2]])
+# 
+# results %>% yardstick::rsq(truth = .[[1]],
+#                            estimate = .[[2]])
 ```
 
 
 ```{r echo=FALSE}
-#arima model
-
-library(timetk)
-library(modeltime)
-
-gasoline_prophet <- modeltime::prophet_reg(seasonality_yearly = TRUE) %>%
-  set_mode('regression') %>%
-  set_engine('prophet') %>% 
-  fit(gasoline_production ~ date, data = gasoline_train_baked)
-
-gasoline_prophet
-
-
-results_prophet <- parsnip::predict.model_fit(gasoline_prophet, 
-                                              new_data = gasoline_test_baked %>% select(date)) %>% 
-  dplyr::transmute(date = gasoline_test_baked$date,
-                   actual = gasoline_test_baked$gasoline_production,
-                   prediction = .pred)
-
-#model fit
-plt <- results_prophet %>% pivot_longer(cols = 2:3, names_to='param', values_to='value') %>% 
-  ggplot(aes(x=date,y=value,color=param)) +
-  geom_line()
-
-
-
-
-# premonition
-premonition_prophet <- parsnip::predict.model_fit(gasoline_prophet, 
-                                                  new_data = nd) %>% 
-  dplyr::transmute(date = nd$date,
-                   # actual = gasoline_test_baked$gasoline_production,
-                   prediction = .pred)
-
-
-plt <- premonition_prophet %>%
-  ggplot(aes(x=date,y=prediction)) +
-  geom_line()
-
-
-plt
-plt %>% plotly::ggplotly()
-
-
-
-
-
-#class prophet
-
-df <- prophet::prophet(gasoline_train_baked %>% 
-                         rename(ds = date, y = gasoline_production) %>% 
-                         select(ds, y))
-
-future <- 
-  prophet::make_future_dataframe(df, periods = 12, freq = 'month')
-tail(future)
-
-######### TO USE IN PARSNIP PREDICTCION
-nd <- tibble(date = future$ds)
-#########
-
-
-forecast <- predict(df, future)
-tail(forecast[c('ds', 'yhat', 'yhat_lower', 'yhat_upper')])
-
-p <- plot(df, forecast, xlabel = "", ylabel = "kbd")
-
-plotly::ggplotly(p)
-
-
-prophet::prophet_plot_components(df, forecast)
+# #arima model
+# 
+# library(timetk)
+# library(modeltime)
+# 
+# gasoline_prophet <- modeltime::prophet_reg(seasonality_yearly = TRUE) %>%
+#   set_mode('regression') %>%
+#   set_engine('prophet') %>% 
+#   fit(gasoline_production ~ date, data = gasoline_train_baked)
+# 
+# gasoline_prophet
+# 
+# 
+# results_prophet <- parsnip::predict.model_fit(gasoline_prophet, 
+#                                               new_data = gasoline_test_baked %>% select(date)) %>% 
+#   dplyr::transmute(date = gasoline_test_baked$date,
+#                    actual = gasoline_test_baked$gasoline_production,
+#                    prediction = .pred)
+# 
+# #model fit
+# plt <- results_prophet %>% pivot_longer(cols = 2:3, names_to='param', values_to='value') %>% 
+#   ggplot(aes(x=date,y=value,color=param)) +
+#   geom_line()
+# 
+# 
+# 
+# 
+# # premonition
+# premonition_prophet <- parsnip::predict.model_fit(gasoline_prophet, 
+#                                                   new_data = nd) %>% 
+#   dplyr::transmute(date = nd$date,
+#                    # actual = gasoline_test_baked$gasoline_production,
+#                    prediction = .pred)
+# 
+# 
+# plt <- premonition_prophet %>%
+#   ggplot(aes(x=date,y=prediction)) +
+#   geom_line()
+# 
+# 
+# plt
+# plt %>% plotly::ggplotly()
+# 
+# 
+# 
+# 
+# 
+# #class prophet
+# 
+# df <- prophet::prophet(gasoline_train_baked %>% 
+#                          rename(ds = date, y = gasoline_production) %>% 
+#                          select(ds, y))
+# 
+# future <- 
+#   prophet::make_future_dataframe(df, periods = 12, freq = 'month')
+# tail(future)
+# 
+# ######### TO USE IN PARSNIP PREDICTCION
+# nd <- tibble(date = future$ds)
+# #########
+# 
+# 
+# forecast <- predict(df, future)
+# tail(forecast[c('ds', 'yhat', 'yhat_lower', 'yhat_upper')])
+# 
+# p <- plot(df, forecast, xlabel = "", ylabel = "kbd")
+# 
+# plotly::ggplotly(p)
+# 
+# 
+# prophet::prophet_plot_components(df, forecast)
 
 ```
 
@@ -414,78 +415,78 @@ prophet::prophet_plot_components(df, forecast)
 
 #### Over 50% of crude is converted into gasoline.
 ```{r echo=FALSE}
-
-##################################### Trading strategy
-mstar <- c('morningstar.ctrd@ualberta.ca','k^ehE%&vbX')
-
-# generate contracts
-generateContracts <- function(tick, first_year, last_year, month_1, month_2) {
-  
-  yrs = seq(from = first_year, to=last_year, by=1)
-  contract_yrs = seq(from = substring(first_year, nchar(first_year)), 
-            to=substring(last_year, nchar(last_year)),
-            by = 1)
-  contract = paste0(rep(tick, length(yrs)),
-                    contract_yrs)
-  
-  cp <- dplyr::tibble(
-    year = yrs,
-    first = paste0(contract, month_1),
-    second = paste0(contract, month_2)
-  )
- 
-  return(cp)
-  
-}
-
-cpairs1 <- generateContracts("RB", 2014, 2020, 'H', 'J')
-
-#https://www.cmegroup.com/month-codes.html
-
-#trade the time spread
-cpairs <-
-  dplyr::tibble(
-    year = c("2014", "2015", "2016", "2017", "2018", "2019", "2020", "2021"),
-    first = c("@RB4M", "@RB5M", "@RB6M", "@RB7M", "@RB8M", "@RB9M", "@RB0M", "RB21M"),
-    second = c("@RB4V", "@RB5V", "@RB6V", "@RB7V", "@RB8V", "@RB9V", "@RB0V", "RB21V")
-  )
-
-
-#trade the crack spread
-cpairs <-
-  dplyr::tibble(
-    year = c("2014", "2015", "2016", "2017", "2018", "2019", "2020", "2021"),
-    first = c("@RB4H", "@RB5H", "@RB6H", "@RB7H", "@RB8H", "@RB9H", "@RB0H", "RB21H"),
-    second = c("@CL4H", "@CL5H", "@CL6H", "@CL7H", "@CL8H", "@CL9H", "@CL0H", "CL21H")
-  )
-
-RTL::chart_spreads(
-  cpairs = cpairs,
-  daysFromExpiry = 200,
-  from = "2012-01-01",
-  conversion = c(42,42),
-  feed = "CME_NymexFutures_EOD",
-  iuser = mstar[[1]],
-  ipassword = mstar[[2]],
-  title = "March/April ULSD Nymex Spreads",
-  yaxis = "$ per bbl",
-  output = "data"
-)
-
-RTL::chart_spreads(
-  cpairs = cpairs1,
-  daysFromExpiry = 200,
-  from = "2012-01-01",
-  conversion = c(42,42),
-  feed = "CME_NymexFutures_EOD",
-  iuser = mstar[[1]],
-  ipassword = mstar[[2]],
-  title = "March/April ULSD Nymex Spreads",
-  yaxis = "$ per bbl",
-  output = "chart"
-)
-
-tickers_eia
+# 
+# ##################################### Trading strategy
+# mstar <- c('morningstar.ctrd@ualberta.ca','k^ehE%&vbX')
+# 
+# # generate contracts
+# generateContracts <- function(tick, first_year, last_year, month_1, month_2) {
+#   
+#   yrs = seq(from = first_year, to=last_year, by=1)
+#   contract_yrs = seq(from = substring(first_year, nchar(first_year)), 
+#             to=substring(last_year, nchar(last_year)),
+#             by = 1)
+#   contract = paste0(rep(tick, length(yrs)),
+#                     contract_yrs)
+#   
+#   cp <- dplyr::tibble(
+#     year = yrs,
+#     first = paste0(contract, month_1),
+#     second = paste0(contract, month_2)
+#   )
+#  
+#   return(cp)
+#   
+# }
+# 
+# cpairs1 <- generateContracts("RB", 2014, 2020, 'H', 'J')
+# 
+# #https://www.cmegroup.com/month-codes.html
+# 
+# #trade the time spread
+# cpairs <-
+#   dplyr::tibble(
+#     year = c("2014", "2015", "2016", "2017", "2018", "2019", "2020", "2021"),
+#     first = c("@RB4M", "@RB5M", "@RB6M", "@RB7M", "@RB8M", "@RB9M", "@RB0M", "RB21M"),
+#     second = c("@RB4V", "@RB5V", "@RB6V", "@RB7V", "@RB8V", "@RB9V", "@RB0V", "RB21V")
+#   )
+# 
+# 
+# #trade the crack spread
+# cpairs <-
+#   dplyr::tibble(
+#     year = c("2014", "2015", "2016", "2017", "2018", "2019", "2020", "2021"),
+#     first = c("@RB4H", "@RB5H", "@RB6H", "@RB7H", "@RB8H", "@RB9H", "@RB0H", "RB21H"),
+#     second = c("@CL4H", "@CL5H", "@CL6H", "@CL7H", "@CL8H", "@CL9H", "@CL0H", "CL21H")
+#   )
+# 
+# RTL::chart_spreads(
+#   cpairs = cpairs,
+#   daysFromExpiry = 200,
+#   from = "2012-01-01",
+#   conversion = c(42,42),
+#   feed = "CME_NymexFutures_EOD",
+#   iuser = mstar[[1]],
+#   ipassword = mstar[[2]],
+#   title = "March/April ULSD Nymex Spreads",
+#   yaxis = "$ per bbl",
+#   output = "data"
+# )
+# 
+# RTL::chart_spreads(
+#   cpairs = cpairs1,
+#   daysFromExpiry = 200,
+#   from = "2012-01-01",
+#   conversion = c(42,42),
+#   feed = "CME_NymexFutures_EOD",
+#   iuser = mstar[[1]],
+#   ipassword = mstar[[2]],
+#   title = "March/April ULSD Nymex Spreads",
+#   yaxis = "$ per bbl",
+#   output = "chart"
+# )
+# 
+# tickers_eia
 
 ```
 

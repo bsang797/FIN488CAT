@@ -74,14 +74,8 @@ eia_fin_gasoline <- tibble::tribble(
   # 'PET.MGFUA_NUS_2.M', 'adjustments', 'input',
   # per DAY
   
-  'PET.EER_EPMRR_PF4_Y05LA_DPG.D', 'rbob_spot' , 'spot',
-  # dollars per gallon
-
+  'PET.EER_EPMRR_PF4_Y05LA_DPG.D', 'rbob_spot' , 'spot', # dollars per gallon
 )
-
-tidyquant::quandl_api_key("4xU_yj1yptrrfDsjkDeK")
-tq_get()
-
 
 gasoline_data <- eia_fin_gasoline %>%
    dplyr::mutate(key = '4d1df1f2cab976fcda3c066a4723d720') %>%
@@ -112,21 +106,22 @@ gasoline_data <- gasoline_data %>%
 ############-------------------------Plot SD model
 gasoline_plt <- gasoline_data %>% 
   # Compare to changes in price/days of supply
-  # dplyr::mutate(value = case_when(param=='days_supply' ~ value*1000,
-  #                                 param=='rbob_spot' ~ value*1000,
-  #                                 TRUE ~ value)) %>% 
-  dplyr::filter(param %in% c('gasoline_production',
-                             'consumption',
-                             'gasoline_imports',
-                             'gasoline_exports',
-                             'total_gasoline_stock',
-                             'gasoline_stock',
-                             'blending_components_stock'
+  dplyr::mutate(value = case_when(param=='days_supply' ~ value*1000,
+                                  param=='rbob_spot' ~ value*400+10000,
+                                  TRUE ~ value)) %>%
+  dplyr::filter(!param %in% c(#'gasoline_production'
+                              # 'consumption',
+                              # 'gasoline_imports',
+                              # 'gasoline_exports',
+                              # 'total_gasoline_stock',
+                              # 'gasoline_stock',
+                              # 'blending_components_stock'
+    'days_supply'
                              )) %>% 
   ggplot(aes(x=date)) +
   geom_line(aes(y=value,color=param)) +
   scale_y_continuous(name = 'Thousand Barrels per week',
-                     sec.axis = sec_axis(~./1000, name = "RBOB Spot price/1000 barrels"),
+                     sec.axis = sec_axis(~./400, name = "RBOB Spot price/1000 barrels"),
                      labels = scales::comma) +
   scale_x_date(date_breaks = '5 years',
                date_labels = '%Y')
@@ -143,7 +138,16 @@ gasoline_plt %>% plotly::ggplotly()
 
 # On a volume basis, U.S. consumption of gasoline declined by more than other petroleum products in 2020. EIA forecasts that U.S. gasoline consumption will rise in the forecast but remain lower than 2019 levels. U.S. gasoline consumption is forecast to average 8.6 million b/d in 2021 and 8.9 million b/d in 2022, up from 8.0 million b/d in 2020 but lower than the 9.3 million b/d consumed in 2019.
 
+
+#  refinery or pipeline problems or reductions in imports cause unexpected declines in supply, gasoline stocks may drop rapidly. This drop in inventories may cause wholesalers to bid higher for available supply over concern that future supplies may not be adequate.
+# 
+# Imbalances may also occur when a region changes from one gasoline formulation to another, and refiners, distributors, and marketers adjust supply for the new product.
 riem_networks()
+
+
+gasoline_stock ~ spot. production.
+
+# rbob_spot ~ gdp, 
 ```
 
 

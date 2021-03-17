@@ -1,0 +1,125 @@
+```{r}
+library(tidyverse)
+library(tidyquant)
+tidyquant::quandl_api_key("iJ-hS_bzUmiZE9_xv-ah")
+tick <- c("CHRIS/CME_CL1", "CHRIS/CME_RB1")
+df.prices <- tick %>%
+  tidyquant::tq_get(get = "quandl", from = "2016-01-01") %>%
+  stats::na.omit()
+
+df.ret <- df.prices %>%
+  dplyr::mutate(
+    series = gsub(pattern = "CHRIS/CME_", "", symbol),
+    value = dplyr::case_when(grepl("RB1", series) ~ settle * 42,
+                             TRUE ~ settle)
+  ) %>%
+  dplyr::select(date, series, value) %>%
+  dplyr::filter(date < as.Date("2020-01-01")) %>%
+  dplyr::group_by(series) %>%
+  dplyr::mutate(ret = value - dplyr::lag(value)) %>%
+  stats::na.omit()
+
+df.ret.wide <- df.ret %>%
+  tidyr::pivot_wider(-value, values_from = ret, names_from = series)
+
+fig.title = paste(colnames(df.ret.wide)[2],
+                  "vs",
+                  colnames(df.ret.wide)[3],
+                  "Relationship")
+axis.lim<- df.ret.wide %>% select(-date) 
+#axis.lim <- max(axis.lim$CL1)
+df.ret.wide %>% ggplot(aes(x = CL1, y = RB1, col = date)) + geom_point() + ylim(-10, 10) + xlim(-10, 10) + labs(title = fig.title)
+
+```
+
+```{r}
+df.ret.wide
+fit <- stats::lm(RB1 ~ CL1, df.ret.wide)
+summary(fit)
+```
+
+```{r}
+broom::augment(fit) %>%
+  ggplot(aes(x = CL1, y = RB1)) + geom_point() +
+  stat_smooth(method = lm, se = FALSE) +
+  geom_segment(aes(xend = CL1, yend = .fitted),
+               color = "orange",
+               size = 0.2) +
+  ylim(-10, 10) + xlim(-10, 10) +
+  labs(title = fig.title)
+```
+
+```{r}
+autoplot(fit,size=0.5)
+```
+
+```{r}
+stats::acf(na.omit(df.ret.wide$RB1))
+stats::acf(resid(fit))
+```
+
+```{r}
+fig.title = "RBOB Forward Curves"
+library(RTL)
+
+df <- tq_get(c(paste("CHRIS/CME_RB", 1:36, sep = "")),
+             get  = "quandl",
+             from = "2010-01-01",
+             to = as.character(Sys.Date()))
+dflong <-
+  df %>% dplyr::mutate(symbol = gsub("CHRIS/CME_", "", symbol)) %>%
+  dplyr::transmute(date = date,
+                   series = symbol,
+                   value = settle)
+
+dfwide <-
+  dflong %>% tidyr::pivot_wider(names_from = series, values_from =  value)
+
+
+RTL::chart_fwd_curves(
+  df = as.data.frame(dfwide),
+  cmdty = "cmewti",
+  weekly = TRUE,
+  main = fig.title,
+  ylab = "$ per mmBTU",
+  xlab = "",
+  cex = 2
+)
+```
+
+```{r}
+eia_df <- tibble::tribble(
+  ~ ticker,
+  ~ series,
+  "PET.WBCSTUS1.W",
+  "RBOB Stock"
+) %>%
+  dplyr::mutate(key = "4d1df1f2cab976fcda3c066a4723d720") %>%
+  dplyr::mutate(df = purrr::pmap(list(ticker, key), .f = RTL::eia2tidy)) %>%
+  dplyr::select(series, df) %>% tidyr::unnest()
+
+dat = c(name = "RBOB Stock", units = "Thousands Barrels")
+fig.title = paste(dat["name"], "Seasonality")
+
+dat2 = eia_df %>% dplyr::filter(series == dat["name"]) %>%
+  dplyr::mutate(year = as.factor(year(date)),
+                dateplot = lubridate::ymd(paste(
+                  c(lubridate::year(Sys.Date()), "01", "01"),
+                  collapse = ""
+                )) + lubridate::yday(date)) %>% filter(date>="2016-01-01") %>% 
+  ggplot(aes(
+    x = dateplot,
+    y = value,
+    group = year,
+    col = year
+  )) +
+  geom_line() + scale_x_date(date_breaks = "1 month", date_labels =  "%b") +
+  labs(
+    title = fig.title,
+    subtitle = "How would you forecast from your SD balance? \nWhat happens to NG Futs time spreads when storage is seasonally low/high?",
+    x = "",
+    y = dat["units"]
+  )
+plotly::ggplotly(dat2)
+```
+

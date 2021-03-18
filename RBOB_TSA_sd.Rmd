@@ -29,6 +29,10 @@ require(tidyquant)
 require(purrr)
 require(RTL)
 library(riem)
+library(lubridate)
+library(tidyselect)
+library(jsonlite)
+library(janitor)
 ```
 
 
@@ -154,14 +158,9 @@ gasoline_plt %>% plotly::ggplotly()
 
 # Analysis, Market View
 ```{r echo=FALSE, fig.width=8, fig.height=5}
-library(zoo)
-library(lubridate)
-library(tidyselect)
-library(jsonlite)
-library(janitor)
+
 
 ########### DATA WRANGLING
-
 getSeason <- function(x) {
   WS <- as.Date("2012-12-15", format = "%Y-%m-%d") # Winter Solstice
   SE <- as.Date("2012-3-15",  format = "%Y-%m-%d") # Spring Equinox
@@ -180,7 +179,9 @@ getSeason <- function(x) {
 
 gasoline_data_wide <- gasoline_data %>% select(-type) %>% 
   pivot_wider(names_from = param, values_from = value) %>% 
-  filter(!is.na(finished_gasoline_exports))
+  filter(!is.na(finished_gasoline_exports)) %>%
+  mutate_if(is.numeric, ~ (.x - lag(.x))/lag(.x)) %>% 
+  na.omit()
 # gasoline_data_wide %>% count(year(date))
 # plot(gasoline_data_wide$date)
 
@@ -210,42 +211,57 @@ states_pop <- qqq %>% select(-state) %>%
   pivot_wider(names_from = 'NAME', values_from = 'POP') %>% 
   filter(DATE_CODE!=c(1,2)) %>% 
   mutate('date' = as.Date('2010-7-1') + years(x = as.numeric(DATE_CODE)-3)) %>% 
-  select(date, everything(), -DATE_CODE) %>% 
-# Calculate percent change 
-  mutate_if(is.numeric, ~ (.x-lag(.x))/lag(.x)) %>%
-  na.omit()
+  select(date, everything(), -DATE_CODE)
 
 states_pop_long <- states_pop %>% 
-  pivot_longer(cols = 2:ncol(states_pop), names_to = 'state', values_to='pop_change') %>% 
+  pivot_longer(cols = 2:ncol(states_pop), names_to = 'state', values_to='population') %>% 
   mutate(padd = case_when(state %in% padd1 ~ 1,
                           state %in% padd2 ~ 2,
                           state %in% padd3 ~ 3,
                           state %in% padd4 ~ 4,
                           state %in% padd5 ~ 5)) %>% 
+  mutate(padd = as.factor(padd)) %>% 
   dplyr::group_by(padd, date) %>% 
   na.omit()
   
 #plotting pop_change
-pop_plt <- states_pop_long %>% summarise('pop_growth' = sum(pop_change)) %>% 
-  ggplot(aes(x=date, y=pop_growth, fill=as.factor(padd))) + 
-  geom_bar(stat = 'identity', position = 'dodge') +
+pop_per_padd <- states_pop_long %>% 
+  summarise('population' = sum(population)) %>% 
+  dplyr::mutate(population = -1 + population/lag(population)) %>% 
+  na.omit()
+
+pop_plt <- pop_per_padd %>% 
+  ggplot(aes(x=date, y=population, color=as.factor(padd))) + 
+  geom_line() +
+  # geom_bar(stat = 'identity', position = 'dodge') +
   labs(title = "Population growth per PADD")
 
 
 
 
 
-
-
 opec_df <- tribble(~ticker, ~param,
-                   'STEO.COPR_OPEC.M', 'OPEC_production',
-                   #consumption per PADD
-                   'PET.MGFUPP12.M', 'ec_padd1',
-                   'PET.MGFUPP22.M', 'midw_padd2',
-                   'PET.MGFUPP32.M', 'gc_padd3',
-                   'PET.MGFUPP42.M', 'rm_padd4',
-                   'PET.MGFUPP52.M', 'wc_padd5',
-                   # 'PET.MGFUPUS2.M', 'consumption',
+                   'STEO.COPR_OPEC.M', 'OPEC_production', #million barrels per day
+                   #consumption per PADD, barrels per day
+                   'PET.MGFUPP12.M', 'demand_padd1',
+                   'PET.MGFUPP22.M', 'demand_padd2',
+                   'PET.MGFUPP32.M', 'demand_padd3',
+                   'PET.MGFUPP42.M', 'demand_padd4',
+                   'PET.MGFUPP52.M', 'demand_padd5',
+                   #Storage per PADD, Total motor gasoline,
+                   'PET.WGTSTP11.W', 'padd1_stock',
+                   'PET.WGTSTP21.W', 'padd2_stock',
+                   'PET.WGTSTP31.W', 'padd3_stock',
+                   'PET.WGTSTP41.W', 'padd4_stock', 
+                   'PET.WGTSTP51.W', 'padd5_stock',
+                   #blending components stock
+                   # 'PET.WBCST_R10_1.W', 'padd1_stock',
+                   # 'PET.WBCST_R20_1.W', 'padd2_stock',
+                   # 'PET.WBCST_R30_1.W', 'padd3_stock',
+                   # 'PET.WBCST_R40_1.W', 'padd4_stock', 
+                   # 'PET.WBCST_R50_1.W', 'padd5_stock',
+                   
+                   # 'PET.MGFUPUS2.M', 'consumption', for country
                    'PET.EER_EPMRR_PF4_Y05LA_DPG.D', 'rbob_spot',
                    ) %>% 
    dplyr::mutate(key = '4d1df1f2cab976fcda3c066a4723d720') %>%
@@ -254,21 +270,43 @@ opec_df <- tribble(~ticker, ~param,
    unnest(cols = data) %>% 
    dplyr::select(date,param,value) %>%
   #Convert to 1000 barrels/day
-  dplyr::mutate(value = case_when(param=='OPEC_production' ~ value*1000,
+   dplyr::mutate(value = case_when(param=='OPEC_production' ~ value*1000,
                                   # param=='rbob_spot' ~ value*42*100+18000, #4200-4.2857
-                                  param=='rbob_spot' ~ value*500+500,
-                                  TRUE ~ value))
-  
+                                   param=='rbob_spot' ~ value*500+500,
+                                   str_detect(param, 'demand') ~ value*30,
+                                   TRUE ~ value))
 
-opec_plt <- opec_df %>% filter(date>"1994-01-01") %>% filter(!param %in% c('OPEC_production',
-                                                                           'rbob_spot')) %>% 
-  ggplot(aes(x=date,y=value,color=param)) + 
-  geom_line() +
-  scale_y_continuous(name = 'Thousand Barrels per month',
-                     sec.axis = sec_axis(~./500-1, name = "RBOB Spot price/1000 barrels"),
-                     labels = scales::comma) %>% 
+opec <- opec_df %>% 
+  filter(param != 'OPEC_production' & param!='rbob_spot') %>% 
+  mutate(padd = case_when(str_detect(param, 'padd1') ~ 1,
+                                     str_detect(param, 'padd2') ~ 2,
+                                     str_detect(param, 'padd3') ~ 3,
+                                     str_detect(param, 'padd4') ~ 4,
+                                     str_detect(param, 'padd5') ~ 5)) %>% 
+  mutate(padd = as.factor(padd)) %>% 
+  group_by(padd)
+
+opec_plt <- opec %>% dplyr::filter(str_detect(param,'demand')) %>% 
+  ggplot(aes(x=date,y=value,color=padd)) + 
+  geom_line() +  
   labs(title = "Consumption and storage per PADD.")
 
+#Join graphs per padd
+
+pop_per_padd <- pop_per_padd %>% 
+  pivot_longer(cols = 3,names_to = 'param', values_to = 'value')
+
+data2 <- bind_rows(opec, pop_per_padd) %>% 
+  group_by(padd) %>% na.omit()
+
+qqq <- data2 %>% dplyr::group_split() 
+
+qqq %>% lapply(FUN = function(x) 
+  ggplot(x, mapping = aes(x=date,y=value,color=param)) + geom_line())
+
+p<-
+qqq[[1]] %>% ggplot(aes(x=date,y=value,color=param)) + geom_line()
+p %>% plotly::ggplotly()
 # opec_plt
 opec_plt %>% plotly::ggplotly() 
 pop_plt %>% plotly::ggplotly()
@@ -280,7 +318,6 @@ pop_plt %>% plotly::ggplotly()
 # library(rsample)
 # library(recipes)
 # library(parsnip) 
-
 # library(broom)
 # library(yardstick)
 # 

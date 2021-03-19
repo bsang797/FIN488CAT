@@ -16,7 +16,7 @@ df.ret <- df.prices %>%
   dplyr::select(date, series, value) %>%
   dplyr::filter(date < as.Date("2020-01-01")) %>%
   dplyr::group_by(series) %>%
-  dplyr::mutate(ret = value - dplyr::lag(value)) %>%
+  dplyr::mutate(ret = value - dplyr::lag(value)) %>% #absolute returns
   stats::na.omit()
 
 df.ret.wide <- df.ret %>%
@@ -26,9 +26,13 @@ fig.title = paste(colnames(df.ret.wide)[2],
                   "vs",
                   colnames(df.ret.wide)[3],
                   "Relationship")
-axis.lim<- df.ret.wide %>% select(-date) 
-#axis.lim <- max(axis.lim$CL1)
-df.ret.wide %>% ggplot(aes(x = CL1, y = RB1, col = date)) + geom_point() + ylim(-10, 10) + xlim(-10, 10) + labs(title = fig.title)
+
+axis.lim <- df.ret.wide %>% select(-date)
+
+df.ret.wide %>% ggplot(aes(x = CL1, y = RB1, col = date)) + 
+  geom_point() + 
+  ylim(-10, 10) + xlim(-10, 10) + 
+  labs(title = fig.title)
 
 ```
 
@@ -50,13 +54,21 @@ broom::augment(fit) %>%
 ```
 
 ```{r}
+library(ggfortify)
+summary(fit)$coefficients
 autoplot(fit,size=0.5)
 ```
 
 ```{r}
-stats::acf(na.omit(df.ret.wide$RB1))
+stats::acf(df.ret.wide$RB1 %>% na.omit())
 stats::acf(resid(fit))
 ```
+
+```{r hedge ratio}
+fit$coefficients
+```
+
+
 
 ```{r}
 fig.title = "RBOB Forward Curves"
@@ -81,32 +93,34 @@ RTL::chart_fwd_curves(
   cmdty = "cmewti",
   weekly = TRUE,
   main = fig.title,
-  ylab = "$ per mmBTU",
+  ylab = "$ per gallon",
   xlab = "",
   cex = 2
 )
 ```
-
+From Nov to Feb stocks go up but from March ot Oct they decrease a lot.
 ```{r}
+EIAkey <- "4d1df1f2cab976fcda3c066a4723d720"
+
 eia_df <- tibble::tribble(
   ~ ticker,
   ~ series,
-  "PET.WBCSTUS1.W",
+  "PET.WGTSTUS1.W",
   "RBOB Stock"
 ) %>%
-  dplyr::mutate(key = "4d1df1f2cab976fcda3c066a4723d720") %>%
+  dplyr::mutate(key = EIAkey) %>%
   dplyr::mutate(df = purrr::pmap(list(ticker, key), .f = RTL::eia2tidy)) %>%
   dplyr::select(series, df) %>% tidyr::unnest()
 
-dat = c(name = "RBOB Stock", units = "Thousands Barrels")
+dat = c(name = "RBOB Stock", units = "Thousand Barrels")
 fig.title = paste(dat["name"], "Seasonality")
 
 dat2 = eia_df %>% dplyr::filter(series == dat["name"]) %>%
   dplyr::mutate(year = as.factor(year(date)),
-                dateplot = lubridate::ymd(paste(
-                  c(lubridate::year(Sys.Date()), "01", "01"),
-                  collapse = ""
-                )) + lubridate::yday(date)) %>% filter(date>="2016-01-01") %>% 
+                dateplot = lubridate::ymd(paste(c(lubridate::year(Sys.Date()), "01", "01"),
+                                                collapse = "")) + 
+                           lubridate::yday(date)) %>% 
+  filter(date>="2016-01-01") %>% 
   ggplot(aes(
     x = dateplot,
     y = value,
@@ -122,4 +136,91 @@ dat2 = eia_df %>% dplyr::filter(series == dat["name"]) %>%
   )
 plotly::ggplotly(dat2)
 ```
+```{r}
+library(tsibble)
+# Select our data, convert to tsibble and assign a year variable
+tsi <- eia_df %>%
+  dplyr::filter(date >= "2010-01-01") %>%
+  tsibble::as_tsibble(key = series, index = date) %>%
+  tsibble::group_by_key() %>%
+  tsibble::index_by(freq = ~ yearmonth(.)) %>%
+  dplyr::summarise(value = mean(value), .groups = c("keep")) %>%
+  dplyr::mutate(change = value - lag(value)) %>% na.omit()
+library(feasts)
+tsi %>% autoplot(value)
+
+tsi %>% feasts::gg_season(value)
+tsi %>% feasts::gg_subseries(value)
+tsi %>% feasts::ACF(value) %>% autoplot() + ggtitle("ACF on Values")
+tsi %>% feasts::ACF(change) %>% autoplot() + ggtitle("ACF on Changes")
+
+```
+
+
+```{r}
+tsi %>%
+  fabletools::model(feasts::STL(value ~ season(window = Inf))) %>%
+  fabletools::components() %>%
+  autoplot()
+
+tsi %>% fabletools::features(value,feat_stl)
+```
+
+```{r}
+df <-
+  tickers_eia %>% dplyr::filter(grepl(pattern = "mogas.*dayssupply", x = tick.r)) %>%
+  dplyr::mutate(key = EIAkey) %>%
+  dplyr::mutate(df = purrr::pmap(list(tick.eia, key, tick.r), .f = RTL::eia2tidy)) %>%
+  dplyr::select(df) %>% tidyr::unnest(df)
+fig.title = "STL"
+RTL::chart_zscore(
+  df = df,
+  title = fig.title,
+  per = "yearweek",
+  output = "stl",
+  chart = "seasons"
+)
+fig.title = "STL Stats"
+RTL::chart_zscore(
+  df = df,
+  title = fig.title,
+  per = "yearweek",
+  output = "stats",
+  chart = "seasons"
+)
+fig.title = "Z Scores"
+RTL::chart_zscore(
+  df = df,
+  title = fig.title,
+  per = "yearweek",
+  output = "zscore",
+  chart = "seasons"
+)
+fig.title = "Seasonal"
+RTL::chart_zscore(
+  df = df,
+  title = fig.title,
+  per = "yearweek",
+  output = "seasonal",
+  chart = "seasons"
+)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
